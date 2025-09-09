@@ -15,8 +15,17 @@ export const bulkCreateUsers = async (users: Array<{ name: string; email: string
 	return data
 }
 
-export const registerAdmin = async (payload: { name: string; email: string; password: string }) => {
+export const registerAdmin = async (payload: { name: string; email: string; password: string; role: string }) => {
 	const { data } = await api.post('/register', payload)
 	return data
+}
+
+export const checkEmailExists = async (email: string) => {
+	try {
+		const { data } = await api.get(`/users/check-email?email=${encodeURIComponent(email)}`)
+		return data.exists
+	} catch (error) {
+		return false
+	}
 }
 

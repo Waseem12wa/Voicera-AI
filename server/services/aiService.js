@@ -156,11 +156,12 @@ export class AIService {
 
 	static generateFallbackQuiz(topic) {
 		console.log('Generating fallback quiz for topic:', topic)
+		const cleanTopic = topic?.replace(/content analysis failed/gi, 'General Knowledge') || 'General Knowledge'
 		return {
-			quizTitle: `Quiz: ${topic || 'General Knowledge'}`,
+			quizTitle: `Quiz: ${cleanTopic}`,
 			questions: [
 				{
-					question: `What is the main focus of ${topic || 'this topic'}?`,
+					question: `What is the main focus of ${cleanTopic}?`,
 					options: [
 						"Understanding key concepts",
 						"Memorizing facts",
@@ -171,7 +172,7 @@ export class AIService {
 					explanation: "Understanding key concepts is fundamental to learning any topic effectively."
 				},
 				{
-					question: `Which approach is most effective for learning ${topic || 'this subject'}?`,
+					question: `Which approach is most effective for learning ${cleanTopic}?`,
 					options: [
 						"Active engagement and practice",
 						"Passive reading only",
@@ -182,7 +183,7 @@ export class AIService {
 					explanation: "Active engagement and practice lead to better retention and understanding."
 				},
 				{
-					question: `What is an important skill when studying ${topic || 'this material'}?`,
+					question: `What is an important skill when studying ${cleanTopic}?`,
 					options: [
 						"Critical thinking",
 						"Speed reading",
@@ -193,7 +194,7 @@ export class AIService {
 					explanation: "Critical thinking helps analyze and understand complex concepts deeply."
 				},
 				{
-					question: `How should you approach difficult concepts in ${topic || 'this subject'}?`,
+					question: `How should you approach difficult concepts in ${cleanTopic}?`,
 					options: [
 						"Break them down into smaller parts",
 						"Skip them entirely",
@@ -204,7 +205,7 @@ export class AIService {
 					explanation: "Breaking down complex concepts makes them more manageable and understandable."
 				},
 				{
-					question: `What is the best way to retain information about ${topic || 'this topic'}?`,
+					question: `What is the best way to retain information about ${cleanTopic}?`,
 					options: [
 						"Regular review and practice",
 						"One-time reading",

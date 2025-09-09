@@ -27,6 +27,8 @@ const EnhancedTeacherDashboard = () => {
 	const [questionDialogOpen, setQuestionDialogOpen] = useState(false)
 	const [newQuestion, setNewQuestion] = useState('')
 	const [newContext, setNewContext] = useState('')
+	const [viewQuestionsDialogOpen, setViewQuestionsDialogOpen] = useState(false)
+	const [selectedQuiz, setSelectedQuiz] = useState<any>(null)
 	
 	const qc = useQueryClient()
 
@@ -134,13 +136,26 @@ const EnhancedTeacherDashboard = () => {
 		}
 	}
 
+	const handleViewQuestions = (quiz: any) => {
+		setSelectedQuiz(quiz)
+		setViewQuestionsDialogOpen(true)
+	}
+
 	return (
-		<Box sx={{ my: 2 }}>
+		<Box sx={{ 
+			my: 2, 
+			maxWidth: '1200px', 
+			mx: 'auto', 
+			px: 2,
+			display: 'flex',
+			flexDirection: 'column',
+			alignItems: 'center'
+		}}>
 			<Typography variant="h5" mb={2} sx={{ textAlign: 'center', fontWeight: 'bold' }}>
 				Enhanced Teacher Dashboard
 			</Typography>
 			
-			<Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ mb: 2 }}>
+			<Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ mb: 2, width: '100%', justifyContent: 'center' }}>
 				<Tab label="Files & Content" />
 				<Tab label="AI Interactions" />
 				<Tab label="Generated Quizzes" />
@@ -149,7 +164,7 @@ const EnhancedTeacherDashboard = () => {
 
 			{/* Files & Content Tab */}
 			{tab === 0 && (
-				<Box>
+				<Box sx={{ width: '100%' }}>
 					{/* Section Navigation */}
 					<Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap' }}>
 						{sections.map((section) => (
@@ -237,7 +252,7 @@ const EnhancedTeacherDashboard = () => {
 
 			{/* AI Interactions Tab */}
 			{tab === 1 && (
-				<Box>
+				<Box sx={{ width: '100%' }}>
 					<Paper sx={{ p: 2, mb: 2 }}>
 						<Stack direction="row" spacing={2} alignItems="center">
 							<Button 
@@ -307,7 +322,7 @@ const EnhancedTeacherDashboard = () => {
 
 			{/* Generated Quizzes Tab */}
 			{tab === 2 && (
-				<Box>
+				<Box sx={{ width: '100%' }}>
 					<Paper sx={{ p: 2, mb: 2 }}>
 						<Typography variant="h6" gutterBottom>
 							🤖 AI-Generated Quizzes
@@ -359,6 +374,7 @@ const EnhancedTeacherDashboard = () => {
 											<Button 
 												variant="outlined" 
 												size="small"
+												onClick={() => handleViewQuestions(quiz)}
 												sx={{ 
 													borderRadius: '50px',
 													fontWeight: 'bold',
@@ -434,7 +450,7 @@ const EnhancedTeacherDashboard = () => {
 
 			{/* Analytics Tab */}
 			{tab === 3 && (
-				<Box>
+				<Box sx={{ width: '100%' }}>
 					{analytics && (
 						<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2 }}>
 							<Card>
@@ -552,6 +568,75 @@ const EnhancedTeacherDashboard = () => {
 						}}
 					>
 						Generate Response
+					</Button>
+				</DialogActions>
+			</Dialog>
+
+			{/* View Questions Dialog */}
+			<Dialog open={viewQuestionsDialogOpen} onClose={() => setViewQuestionsDialogOpen(false)} maxWidth="md" fullWidth>
+				<DialogTitle>
+					{selectedQuiz?.title || 'Quiz Questions'}
+				</DialogTitle>
+				<DialogContent>
+					{selectedQuiz && (
+						<Stack spacing={3}>
+							<Typography variant="body2" color="text.secondary">
+								{selectedQuiz.description}
+							</Typography>
+							
+							{selectedQuiz.questions && selectedQuiz.questions.length > 0 ? (
+								selectedQuiz.questions.map((question: any, index: number) => (
+									<Paper key={index} sx={{ p: 2, border: '1px solid #e0e0e0' }}>
+										<Stack spacing={2}>
+											<Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+												Question {index + 1}: {question.question}
+											</Typography>
+											
+											<Box>
+												<Typography variant="subtitle2" gutterBottom>
+													Options:
+												</Typography>
+												{question.options && question.options.map((option: string, optIndex: number) => (
+													<Typography 
+														key={optIndex} 
+														variant="body2" 
+														sx={{ 
+															pl: 2, 
+															mb: 0.5,
+															color: optIndex === question.correctAnswer ? 'success.main' : 'text.primary',
+															fontWeight: optIndex === question.correctAnswer ? 'bold' : 'normal'
+														}}
+													>
+														{String.fromCharCode(65 + optIndex)}. {option}
+														{optIndex === question.correctAnswer && ' ✓'}
+													</Typography>
+												))}
+											</Box>
+											
+											{question.explanation && (
+												<Box sx={{ bgcolor: 'grey.50', p: 2, borderRadius: 1 }}>
+													<Typography variant="subtitle2" gutterBottom>
+														Explanation:
+													</Typography>
+													<Typography variant="body2">
+														{question.explanation}
+													</Typography>
+												</Box>
+											)}
+										</Stack>
+									</Paper>
+								))
+							) : (
+								<Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
+									No questions available for this quiz.
+								</Typography>
+							)}
+						</Stack>
+					)}
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setViewQuestionsDialogOpen(false)}>
+						Close
 					</Button>
 				</DialogActions>
 			</Dialog>

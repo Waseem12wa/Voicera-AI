@@ -5,6 +5,7 @@ import { Box, Button, Paper, Stack, TextField, Typography } from '@mui/material'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { loginSuccess } from '../../features/auth/authSlice'
+import { enqueueSnackbar } from 'notistack'
 import api from '../../services/apiClient'
 
 const schema = z.object({
@@ -23,12 +24,26 @@ const LoginPage = () => {
 	})
 
 	const onSubmit = async (values: FormValues) => {
-		const { data } = await api.post('/login', values)
-		dispatch(loginSuccess({ token: data.token, user: data.user }))
-		const role = data.user.role
-		const defaultRoute = role === 'teacher' ? '/teacher' : '/admin'
-		const redirectTo = location.state?.from?.pathname || defaultRoute
-		navigate(redirectTo, { replace: true })
+		try {
+			const { data } = await api.post('/login', values)
+			
+			// Save credentials to localStorage for future login
+			localStorage.setItem('token', data.token)
+			localStorage.setItem('user', JSON.stringify(data.user))
+			
+			dispatch(loginSuccess({ token: data.token, user: data.user }))
+			
+			const role = data.user.role
+			const defaultRoute = role === 'teacher' ? '/teacher' : '/admin'
+			const redirectTo = location.state?.from?.pathname || defaultRoute
+			
+			enqueueSnackbar(`Welcome back, ${data.user.name}!`, { variant: 'success' })
+			navigate(redirectTo, { replace: true })
+		} catch (error: any) {
+			console.error('Login error:', error)
+			const errorMessage = error?.response?.data?.error || 'Login failed. Please check your credentials.'
+			enqueueSnackbar(errorMessage, { variant: 'error' })
+		}
 	}
 
 	return (
