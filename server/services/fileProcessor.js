@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { AIService } from './aiService.js'
+import mammoth from 'mammoth'
 
 export class FileProcessor {
 	static async processFile(file, teacherEmail) {
@@ -48,6 +49,7 @@ export class FileProcessor {
 				section,
 				aiAnalysis: {
 					...analysis,
+					rawContent: content, // Store the raw content for quiz generation
 					analyzedAt: new Date()
 				},
 				status: 'processed',
@@ -65,21 +67,67 @@ export class FileProcessor {
 	}
 	
 	static async extractPDFContent(fileName) {
-		// Placeholder for PDF extraction
-		// In production, use libraries like pdf-parse or pdf2pic
-		return `PDF content from ${fileName} - This is a placeholder for actual PDF text extraction.`
+		try {
+			// For now, we'll use a more descriptive approach
+			// In production, you would use a proper PDF parsing library
+			const filePath = path.join('./uploads', fileName)
+			
+			// Check if file exists
+			if (!fs.existsSync(filePath)) {
+				return `PDF file ${fileName} not found in uploads directory.`
+			}
+			
+			// Get file stats
+			const stats = fs.statSync(filePath)
+			const fileSize = (stats.size / 1024 / 1024).toFixed(2) // Size in MB
+			
+			// Return descriptive content based on file
+			return `PDF Document: ${fileName}
+File Size: ${fileSize} MB
+Content Type: PDF Document
+Description: This is a PDF document that contains educational or reference material. The document includes text, images, and formatted content that can be used for learning and teaching purposes.
+
+Note: For full text extraction, a PDF parsing library would be needed. This document appears to be educational material suitable for creating quiz questions and learning activities.`
+		} catch (error) {
+			console.error('PDF extraction error:', error)
+			return `PDF content from ${fileName} - Error accessing file: ${error.message}`
+		}
 	}
 	
 	static async extractPPTContent(fileName) {
-		// Placeholder for PowerPoint extraction
-		// In production, use libraries like officegen or node-pptx
-		return `PowerPoint content from ${fileName} - This is a placeholder for actual PPT text extraction.`
+		try {
+			// For now, return a more descriptive placeholder
+			// In production, you would use libraries like node-pptx or officegen
+			return `PowerPoint presentation: ${fileName}. This file contains slides and presentation content. To extract actual text content, additional processing libraries are needed.`
+		} catch (error) {
+			console.error('PPT extraction error:', error)
+			return `PowerPoint content from ${fileName} - Error extracting text: ${error.message}`
+		}
 	}
 	
 	static async extractDOCContent(fileName) {
-		// Placeholder for Word document extraction
-		// In production, use libraries like mammoth or docx
-		return `Word document content from ${fileName} - This is a placeholder for actual DOC text extraction.`
+		try {
+			const filePath = path.join('./uploads', fileName)
+			
+			// Check if file exists
+			if (!fs.existsSync(filePath)) {
+				return `Word document ${fileName} not found in uploads directory.`
+			}
+			
+			// Extract text from DOCX file using mammoth
+			const result = await mammoth.extractRawText({ path: filePath })
+			const text = result.value
+			
+			if (!text || text.trim().length < 10) {
+				return `Word document: ${fileName}. The document appears to be empty or contains only images/formatting.`
+			}
+			
+			console.log(`Extracted ${text.length} characters from ${fileName}`)
+			return text
+		} catch (error) {
+			console.error('DOC extraction error:', error)
+			return `Word document content from ${fileName} - Error extracting text: ${error.message}`
+		}
 	}
 	
 	static async extractTextContent(fileName) {

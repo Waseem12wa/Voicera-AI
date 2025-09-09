@@ -51,6 +51,7 @@ app.use((req, res, next) => {
 import File from './models/File.js'
 import Quiz from './models/Quiz.js'
 import StudentInteraction from './models/StudentInteraction.js'
+import StudentNote from './models/StudentNote.js'
 import { FileProcessor } from './services/fileProcessor.js'
 import { AIService } from './services/aiService.js'
 
@@ -454,9 +455,16 @@ app.post('/api/teacher/generate-quiz', async (req, res) => {
 		
 		console.log('File found:', file.originalName, 'Content available:', !!file.aiAnalysis?.summary)
 		
-		// Extract content (simplified for demo)
-		const content = file.aiAnalysis?.summary || file.description || file.originalName
+		// Extract content from file analysis or use file content directly
+		let content = file.aiAnalysis?.summary || file.description || file.originalName
+		
+		// If we have the actual file content, use it for better quiz generation
+		if (file.aiAnalysis?.rawContent) {
+			content = file.aiAnalysis.rawContent
+		}
+		
 		console.log('Content length:', content?.length || 0)
+		console.log('Using content for quiz generation:', content?.substring(0, 100) + '...')
 		
 		const quizData = await AIService.generateQuizFromContent(content, topic || file.title)
 		console.log('Quiz data generated:', quizData.questions?.length || 0, 'questions')
@@ -612,6 +620,234 @@ app.get('/api/teacher/uploads', async (req, res) => {
 app.get('/api/teacher/responses', async (req, res) => {
 	const items = await StudentInteraction.find({ teacherEmail: req.adminEmail }).sort({ createdAt: -1 })
 	res.json(items)
+})
+
+// Student Routes
+app.get('/api/student/courses', async (req, res) => {
+	try {
+		const studentEmail = req.adminEmail
+		
+		// Get all courses with documents and quizzes
+		const courses = await Course.find()
+			.populate('documents')
+			.populate('quizzes')
+		
+		// Filter courses that have content
+		const coursesWithContent = courses.filter(course => 
+			course.documents?.length > 0 || course.quizzes?.length > 0
+		)
+		
+		res.json(coursesWithContent)
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+app.get('/api/student/quizzes', async (req, res) => {
+	try {
+		const studentEmail = req.adminEmail
+		
+		// Get all available quizzes
+		const quizzes = await Quiz.find({ isActive: true })
+			.populate('sourceFile', 'originalName title')
+			.sort({ createdAt: -1 })
+		
+		res.json(quizzes)
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+app.post('/api/student/quizzes/:id/submit', async (req, res) => {
+	try {
+		const { answers } = req.body
+		const quizId = req.params.id
+		const studentEmail = req.adminEmail
+		
+		const quiz = await Quiz.findById(quizId)
+		if (!quiz) {
+			return res.status(404).json({ error: 'Quiz not found' })
+		}
+		
+		// Calculate score
+		let correctAnswers = 0
+		const totalQuestions = quiz.questions.length
+		
+		quiz.questions.forEach((question, index) => {
+			if (answers[question._id] === question.correctAnswer) {
+				correctAnswers++
+			}
+		})
+		
+		const score = Math.round((correctAnswers / totalQuestions) * 100)
+		
+		// Save quiz attempt
+		const attempt = {
+			studentEmail,
+			quizId,
+			answers,
+			score,
+			correctAnswers,
+			totalQuestions,
+			submittedAt: new Date()
+		}
+		
+		// Update quiz statistics
+		await Quiz.findByIdAndUpdate(quizId, {
+			$inc: { totalAttempts: 1 },
+			$push: { attempts: attempt }
+		})
+		
+		res.json({
+			score,
+			correctAnswers,
+			totalQuestions,
+			attempt
+		})
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+app.get('/api/student/progress', async (req, res) => {
+	try {
+		const studentEmail = req.adminEmail
+		
+		// Get quiz attempts
+		const quizzes = await Quiz.find({ 'attempts.studentEmail': studentEmail })
+		
+		let totalQuizzes = 0
+		let totalScore = 0
+		let quizzesCompleted = 0
+		
+		quizzes.forEach(quiz => {
+			const studentAttempts = quiz.attempts.filter(attempt => attempt.studentEmail === studentEmail)
+			if (studentAttempts.length > 0) {
+				quizzesCompleted++
+				totalScore += studentAttempts[studentAttempts.length - 1].score
+			}
+		})
+		
+		const averageScore = quizzesCompleted > 0 ? Math.round(totalScore / quizzesCompleted) : 0
+		
+		// Get notes count
+		const notesCount = await StudentNote.countDocuments({ studentEmail })
+		
+		// Get questions asked count
+		const questionsCount = await StudentInteraction.countDocuments({ studentEmail })
+		
+		res.json({
+			quizzesCompleted,
+			averageScore,
+			notesSaved: notesCount,
+			questionsAsked: questionsCount,
+			totalQuizzes: quizzes.length
+		})
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+app.post('/api/student/notes', async (req, res) => {
+	try {
+		const { title, content, courseId } = req.body
+		const studentEmail = req.adminEmail
+		
+		const note = await StudentNote.create({
+			studentEmail,
+			title,
+			content,
+			courseId
+		})
+		
+		res.json(note)
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+app.get('/api/student/notes', async (req, res) => {
+	try {
+		const studentEmail = req.adminEmail
+		
+		const notes = await StudentNote.find({ studentEmail })
+			.sort({ createdAt: -1 })
+		
+		res.json(notes)
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+app.post('/api/student/ai/ask', async (req, res) => {
+	try {
+		const { question, courseId } = req.body
+		const studentEmail = req.adminEmail
+		
+		// Get course-specific content if courseId provided
+		let context = ''
+		if (courseId) {
+			const course = await Course.findById(courseId).populate('documents')
+			if (course && course.documents) {
+				context = course.documents.map(doc => doc.aiAnalysis?.summary || doc.title).join(' ')
+			}
+		}
+		
+		// Generate AI response
+		const aiResponse = await AIService.generateStudentResponse(question, context, studentEmail)
+		
+		// Save interaction
+		const interaction = await StudentInteraction.create({
+			studentEmail,
+			courseId,
+			question,
+			aiResponse: {
+				content: aiResponse.content,
+				sources: aiResponse.sources || [],
+				confidence: aiResponse.confidence || 0.8
+			},
+			status: 'answered'
+		})
+		
+		res.json(interaction)
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+app.get('/api/student/ai/interactions', async (req, res) => {
+	try {
+		const studentEmail = req.adminEmail
+		
+		const interactions = await StudentInteraction.find({ studentEmail })
+			.populate('courseId', 'name')
+			.sort({ createdAt: -1 })
+		
+		res.json(interactions)
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+app.post('/api/student/ai/personalized', async (req, res) => {
+	try {
+		const { learningStyle, pace } = req.body
+		const studentEmail = req.adminEmail
+		
+		// Get student's performance data
+		const progress = await Quiz.find({ 'attempts.studentEmail': studentEmail })
+		
+		// Analyze performance and generate personalized recommendations
+		const recommendations = await AIService.generatePersonalizedRecommendations(
+			progress, 
+			learningStyle, 
+			pace
+		)
+		
+		res.json(recommendations)
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
 })
 
 const PORT = process.env.PORT || 4000

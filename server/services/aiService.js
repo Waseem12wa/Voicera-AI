@@ -3,37 +3,63 @@ import groq from '../config/groq.js'
 export class AIService {
 	static async analyzeFileContent(content, fileName, fileType) {
 		try {
+			// Check if content is meaningful (not just placeholder text)
+			const isPlaceholder = content.includes('placeholder') || 
+								 content.includes('This is a placeholder') ||
+								 content.length < 50
+			
+			if (isPlaceholder) {
+				console.log('Content appears to be placeholder, using fallback analysis')
+				return {
+					summary: `Document: ${fileName}`,
+					tags: ['document', 'material'],
+					difficulty: 'medium',
+					subject: 'General',
+					quizQuestions: []
+				}
+			}
+
 			const prompt = `
-			Analyze this ${fileType} file named "${fileName}" and provide:
-			1. Content summary (2-3 sentences)
-			2. Key topics/tags (comma-separated)
+			Analyze this ${fileType} file named "${fileName}" and provide a comprehensive analysis:
+			
+			Content: ${content.substring(0, 3000)}
+			
+			Please provide:
+			1. A detailed content summary (2-3 sentences)
+			2. Key topics/tags (5-8 relevant tags)
 			3. Difficulty level (easy/medium/hard)
 			4. Subject category (e.g., Mathematics, Science, Literature, etc.)
 			5. Suggested quiz questions (3-5 questions with answers)
 			
-			Content: ${content.substring(0, 2000)}...
-			
 			Respond in JSON format:
 			{
-				"summary": "brief summary",
-				"tags": ["tag1", "tag2", "tag3"],
+				"summary": "detailed summary of the content",
+				"tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
 				"difficulty": "easy|medium|hard",
 				"subject": "subject category",
 				"quizQuestions": [
-					{"question": "question text", "answer": "correct answer", "options": ["A", "B", "C", "D"]}
+					{
+						"question": "question text",
+						"options": ["Option A", "Option B", "Option C", "Option D"],
+						"correctAnswer": 0,
+						"explanation": "explanation for the correct answer"
+					}
 				]
 			}
 			`
 
 			const completion = await groq.chat.completions.create({
 				messages: [{ role: 'user', content: prompt }],
-				model: 'llama3-8b-8192',
+				model: 'llama-3.1-8b-instant',
 				temperature: 0.3,
 				max_tokens: 1000
 			})
 
-			const response = completion.choices[0]?.message?.content
-			return JSON.parse(response || '{}')
+			const response = completion.choices[0]?.message?.content || ''
+			// Sanitize possible markdown fences before parsing
+			let cleaned = response.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '')
+			const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+			return jsonMatch ? JSON.parse(jsonMatch[0]) : {}
 		} catch (error) {
 			console.error('AI analysis error:', error)
 			return {
@@ -85,26 +111,43 @@ export class AIService {
 				return this.generateFallbackQuiz(topic)
 			}
 
+			// Check if content is meaningful (not just placeholder text)
+			const isPlaceholder = content.includes('placeholder') || 
+								 content.includes('This is a placeholder') ||
+								 content.includes('Error extracting text') ||
+								 content.includes('Content analysis failed') ||
+								 content.length < 50
+			
+			if (isPlaceholder) {
+				console.log('Content is placeholder text or too short, using fallback quiz')
+				return this.generateFallbackQuiz(topic)
+			}
+			
+			console.log(`Generating quiz from ${content.length} characters of real content`)
+
 			const prompt = `
-			Generate a comprehensive quiz about "${topic}" based on this content:
+			Create a comprehensive quiz based on the ACTUAL CONTENT of this document. Read the content carefully and generate questions that test understanding of the specific information, concepts, and details mentioned in the text.
 			
-			${content.substring(0, 1500)}...
+			Document Content:
+			${content.substring(0, 2000)}
 			
-			Create 5 multiple choice questions with:
-			- Clear, concise questions
-			- 4 answer options each
+			Instructions:
+			- Create 5 multiple choice questions that test knowledge of the ACTUAL CONTENT
+			- Questions should be about specific facts, concepts, or details from the document
+			- Each question should have 4 answer options
 			- One correct answer (index 0-3)
-			- Varying difficulty levels
+			- Include explanations that reference the actual content
+			- Make questions progressively more challenging
 			
 			Respond ONLY in valid JSON format:
 			{
-				"quizTitle": "Quiz about ${topic}",
+				"quizTitle": "Quiz: ${topic}",
 				"questions": [
 					{
-						"question": "What is the main topic discussed?",
+						"question": "Based on the document content, what is...?",
 						"options": ["Option A", "Option B", "Option C", "Option D"],
 						"correctAnswer": 0,
-						"explanation": "This is correct because..."
+						"explanation": "This is correct because the document states..."
 					}
 				]
 			}
@@ -125,11 +168,14 @@ export class AIService {
 				throw new Error('No response from AI service')
 			}
 
-			// Try to parse the JSON response
+			// Try to parse the JSON response (sanitize common markdown wrapping)
 			let quizData
 			try {
-				// Clean the response to extract JSON
-				const jsonMatch = response.match(/\{[\s\S]*\}/)
+				let cleaned = response.trim()
+				// Remove markdown fenced code blocks if present
+				cleaned = cleaned.replace(/^```(?:json)?/i, '').replace(/```$/i, '')
+				// Find first JSON object
+				const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
 				if (jsonMatch) {
 					quizData = JSON.parse(jsonMatch[0])
 				} else {
@@ -147,6 +193,13 @@ export class AIService {
 				return this.generateFallbackQuiz(topic)
 			}
 
+			// Clean title if it contains undesirable phrases
+			if (quizData.quizTitle) {
+				quizData.quizTitle = String(quizData.quizTitle)
+					.replace(/content analysis failed/gi, 'Document Content')
+					.replace(/quiz about\s*/i, 'Quiz: ')
+					.trim()
+			}
 			return quizData
 		} catch (error) {
 			console.error('Quiz generation error:', error.message)
@@ -156,64 +209,73 @@ export class AIService {
 
 	static generateFallbackQuiz(topic) {
 		console.log('Generating fallback quiz for topic:', topic)
-		const cleanTopic = topic?.replace(/content analysis failed/gi, 'General Knowledge') || 'General Knowledge'
+		
+		// Clean up the topic name
+		let cleanTopic = topic || 'General Knowledge'
+		cleanTopic = cleanTopic.replace(/content analysis failed/gi, 'Document Content')
+		cleanTopic = cleanTopic.replace(/quiz about/gi, '')
+		cleanTopic = cleanTopic.trim()
+		
+		// Extract filename if available
+		const fileName = cleanTopic.includes('.') ? cleanTopic : 'the document'
+		
 		return {
 			quizTitle: `Quiz: ${cleanTopic}`,
 			questions: [
 				{
-					question: `What is the main focus of ${cleanTopic}?`,
+					question: `What type of document is ${fileName}?`,
 					options: [
-						"Understanding key concepts",
-						"Memorizing facts",
-						"Practical application",
-						"Theoretical knowledge"
+						"Educational material",
+						"Technical documentation", 
+						"Reference guide",
+						"All of the above"
 					],
-					correctAnswer: 0,
-					explanation: "Understanding key concepts is fundamental to learning any topic effectively."
+					correctAnswer: 3,
+					explanation: "Documents can serve multiple purposes including education, technical reference, and guidance."
 				},
 				{
-					question: `Which approach is most effective for learning ${cleanTopic}?`,
+					question: `What is the primary purpose of ${fileName}?`,
 					options: [
-						"Active engagement and practice",
-						"Passive reading only",
-						"Cramming before exams",
-						"Rote memorization"
+						"To provide information and knowledge",
+						"To entertain readers",
+						"To sell products",
+						"To confuse users"
 					],
 					correctAnswer: 0,
-					explanation: "Active engagement and practice lead to better retention and understanding."
+					explanation: "Educational documents are primarily designed to provide information and knowledge to readers."
 				},
 				{
-					question: `What is an important skill when studying ${cleanTopic}?`,
+					question: `How should you approach reading ${fileName}?`,
 					options: [
-						"Critical thinking",
-						"Speed reading",
-						"Multitasking",
-						"Memorization only"
+						"Read actively and take notes",
+						"Skim through quickly",
+						"Read only the headings",
+						"Skip difficult sections"
 					],
 					correctAnswer: 0,
-					explanation: "Critical thinking helps analyze and understand complex concepts deeply."
+					explanation: "Active reading with note-taking helps improve comprehension and retention of information."
 				},
 				{
-					question: `How should you approach difficult concepts in ${cleanTopic}?`,
+					question: `What makes ${fileName} valuable for learning?`,
 					options: [
-						"Break them down into smaller parts",
-						"Skip them entirely",
-						"Memorize without understanding",
-						"Ask someone else to explain"
+						"Contains structured information",
+						"Provides examples and explanations",
+						"Helps build knowledge",
+						"All of the above"
 					],
-					correctAnswer: 0,
-					explanation: "Breaking down complex concepts makes them more manageable and understandable."
+					correctAnswer: 3,
+					explanation: "Educational documents are valuable because they contain structured information, examples, and help build knowledge."
 				},
 				{
-					question: `What is the best way to retain information about ${cleanTopic}?`,
+					question: `What should you do if you don't understand something in ${fileName}?`,
 					options: [
-						"Regular review and practice",
-						"One-time reading",
-						"Highlighting everything",
-						"Copying notes"
+						"Re-read the section carefully",
+						"Ask questions or seek help",
+						"Look up additional resources",
+						"All of the above"
 					],
-					correctAnswer: 0,
-					explanation: "Regular review and practice strengthen neural pathways and improve retention."
+					correctAnswer: 3,
+					explanation: "When encountering difficult content, it's best to re-read, ask questions, and seek additional resources."
 				}
 			]
 		}
@@ -255,11 +317,130 @@ export class AIService {
 			max_tokens: 600
 		})
 
-			const response = completion.choices[0]?.message?.content
-			return JSON.parse(response || '{"weakTopics": [], "overallPerformance": "0%", "recommendations": []}')
+			const response = completion.choices[0]?.message?.content || ''
+			// Sanitize possible markdown fences and parse
+			let cleaned = response.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '')
+			const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+			return jsonMatch 
+				? JSON.parse(jsonMatch[0]) 
+				: { weakTopics: [], overallPerformance: '0%', recommendations: [] }
 		} catch (error) {
 			console.error('Weak topic analysis error:', error)
 			return { weakTopics: [], overallPerformance: '0%', recommendations: [] }
+		}
+	}
+
+	// Student-specific AI methods
+	static async generateStudentResponse(question, context, studentEmail) {
+		try {
+			const prompt = `
+			You are an AI learning assistant helping a student. Answer their question based on the provided course content.
+			
+			Student Question: ${question}
+			Course Context: ${context}
+			
+			Instructions:
+			1. Provide a clear, educational answer based on the course content
+			2. If the question is not covered in the course content, say so and offer to help with related topics
+			3. Include specific examples or explanations when possible
+			4. Suggest follow-up questions or related topics for deeper learning
+			5. Keep the tone encouraging and supportive
+			
+			Respond in JSON format:
+			{
+				"content": "Your detailed answer here",
+				"sources": ["source1", "source2"],
+				"confidence": 0.8,
+				"followUpSuggestions": ["suggestion1", "suggestion2"]
+			}
+			`
+
+			const completion = await groq.chat.completions.create({
+				messages: [{ role: 'user', content: prompt }],
+				model: 'llama-3.1-8b-instant',
+				temperature: 0.5,
+				max_tokens: 800
+			})
+
+			const response = completion.choices[0]?.message?.content || ''
+			let cleaned = response.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '')
+			const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+			
+			if (jsonMatch) {
+				return JSON.parse(jsonMatch[0])
+			} else {
+				return {
+					content: "I understand your question, but I need more information to provide a comprehensive answer. Could you provide more details about what specific aspect you'd like to learn about?",
+					sources: [],
+					confidence: 0.3,
+					followUpSuggestions: ["Could you clarify your question?", "What specific topic interests you?"]
+				}
+			}
+		} catch (error) {
+			console.error('Student response generation error:', error)
+			return {
+				content: "I apologize, but I'm having trouble processing your question right now. Please try rephrasing your question or contact your teacher for assistance.",
+				sources: [],
+				confidence: 0.1,
+				followUpSuggestions: ["Try rephrasing your question", "Contact your teacher"]
+			}
+		}
+	}
+
+	static async generatePersonalizedRecommendations(progress, learningStyle, pace) {
+		try {
+			const prompt = `
+			Analyze this student's learning progress and generate personalized recommendations:
+			
+			Student Progress: ${JSON.stringify(progress)}
+			Learning Style: ${learningStyle}
+			Learning Pace: ${pace}
+			
+			Generate recommendations for:
+			1. Study strategies based on learning style
+			2. Content difficulty adjustments based on pace
+			3. Areas for improvement
+			4. Next learning steps
+			
+			Respond in JSON format:
+			{
+				"studyStrategies": ["strategy1", "strategy2"],
+				"contentRecommendations": ["content1", "content2"],
+				"improvementAreas": ["area1", "area2"],
+				"nextSteps": ["step1", "step2"],
+				"personalizedMessage": "Encouraging message for the student"
+			}
+			`
+
+			const completion = await groq.chat.completions.create({
+				messages: [{ role: 'user', content: prompt }],
+				model: 'llama-3.1-8b-instant',
+				temperature: 0.4,
+				max_tokens: 600
+			})
+
+			const response = completion.choices[0]?.message?.content || ''
+			let cleaned = response.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '')
+			const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+			
+			return jsonMatch 
+				? JSON.parse(jsonMatch[0]) 
+				: {
+					studyStrategies: ["Review course materials regularly", "Practice with quizzes"],
+					contentRecommendations: ["Focus on areas with lower scores"],
+					improvementAreas: ["Continue practicing"],
+					nextSteps: ["Complete more quizzes", "Ask questions when needed"],
+					personalizedMessage: "Keep up the great work! Continue learning at your own pace."
+				}
+		} catch (error) {
+			console.error('Personalized recommendations error:', error)
+			return {
+				studyStrategies: ["Review course materials regularly"],
+				contentRecommendations: ["Focus on understanding concepts"],
+				improvementAreas: ["Continue practicing"],
+				nextSteps: ["Complete quizzes", "Ask questions"],
+				personalizedMessage: "Keep learning and don't hesitate to ask questions!"
+			}
 		}
 	}
 }

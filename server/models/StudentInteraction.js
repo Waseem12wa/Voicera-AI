@@ -1,8 +1,9 @@
 import mongoose from 'mongoose'
 
 const studentInteractionSchema = new mongoose.Schema({
-	teacherEmail: { type: String, required: true, index: true },
+	teacherEmail: { type: String, index: true },
 	studentEmail: { type: String, required: true, index: true },
+	courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
 	// Interaction Types
 	type: { 
 		type: String, 
@@ -19,6 +20,7 @@ const studentInteractionSchema = new mongoose.Schema({
 	// AI Response
 	aiResponse: {
 		content: String,
+		sources: [String],
 		source: { type: String, enum: ['repository', 'web', 'generated'] },
 		confidence: Number,
 		approved: { type: Boolean, default: false },

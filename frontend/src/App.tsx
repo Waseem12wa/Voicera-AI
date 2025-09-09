@@ -16,11 +16,13 @@ import { ProtectedRoute } from './routes/ProtectedRoute'
 import AdminLayout from './layouts/AdminLayout'
 const TeacherDashboard = lazy(() => import('./pages/teacher/TeacherDashboard'))
 const EnhancedTeacherDashboard = lazy(() => import('./pages/teacher/EnhancedTeacherDashboard'))
+const StudentDashboard = lazy(() => import('./pages/student/StudentDashboard'))
 const HomeRouter = () => {
   const auth = useSelector((s: RootState) => s.auth)
   if (!auth.isAuthenticated) return <Navigate to="/login" replace />
   const role = auth.user?.role
   if (role === 'teacher') return <Navigate to="/teacher" replace />
+  if (role === 'student') return <Navigate to="/student" replace />
   return <Navigate to="/admin" replace />
 }
 
@@ -42,6 +44,9 @@ function App() {
         <Route element={<ProtectedRoute roles={["teacher"]} />}>
           <Route path="/teacher" element={<EnhancedTeacherDashboard />} />
           <Route path="/teacher/legacy" element={<TeacherDashboard />} />
+        </Route>
+        <Route element={<ProtectedRoute roles={["student"]} />}>
+          <Route path="/student" element={<StudentDashboard />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
