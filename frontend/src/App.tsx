@@ -22,6 +22,7 @@ const LogManagement = lazy(() => import('./pages/admin/LogManagement'))
 const RBACManagement = lazy(() => import('./pages/admin/RBACManagement'))
 const ContentManagement = lazy(() => import('./pages/admin/ContentManagement'))
 const EmailAlertsManagement = lazy(() => import('./pages/admin/EmailAlertsManagement'))
+const DeveloperPortal = lazy(() => import('./pages/developer/DeveloperPortal'))
 
 import { ProtectedRoute } from './routes/ProtectedRoute'
 import AdminLayout from './layouts/AdminLayout'
@@ -72,6 +73,7 @@ function App() {
                     <EmailAlertsManagement />
                   </ErrorBoundary>
                 } />
+                <Route path="/developer" element={<DeveloperPortal />} />
                 <Route path="/institution" element={<InstitutionProfilePage />} />
                 <Route path="/programs" element={<ProgramsCoursesPage />} />
                 <Route path="/users" element={<UserOnboardingPage />} />

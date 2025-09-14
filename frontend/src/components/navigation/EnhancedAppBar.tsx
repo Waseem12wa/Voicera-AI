@@ -54,6 +54,7 @@ const navItems: NavItem[] = [
   { label: 'RBAC', path: '/admin/rbac', roles: ['admin', 'institution_admin'] },
   { label: 'Content', path: '/admin/content', roles: ['admin', 'institution_admin'] },
   { label: 'Alerts', path: '/admin/alerts', roles: ['admin', 'institution_admin'] },
+  { label: 'Developer Portal', path: '/developer', roles: ['admin', 'institution_admin'] },
   { label: 'Institution', path: '/institution', roles: ['admin', 'institution_admin'] },
   { label: 'Programs & Courses', path: '/programs', roles: ['admin', 'institution_admin'] },
   { label: 'Users', path: '/users', roles: ['admin', 'institution_admin'] },

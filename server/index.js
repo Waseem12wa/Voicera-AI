@@ -5,6 +5,7 @@ import dotenv from 'dotenv'
 import mongoose from 'mongoose'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
+import integrationRoutes from './api/routes/integrationRoutes.js'
 
 dotenv.config()
 
@@ -250,6 +251,9 @@ app.use((req, _res, next) => {
 })
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
+
+// API Integration Routes
+app.use('/api', integrationRoutes)
 
 // Test Groq API connection
 app.get('/api/test-groq', async (_req, res) => {
@@ -2458,6 +2462,7 @@ app.get('/api/admin/rbac/stats', async (req, res) => {
 		res.status(500).json({ error: error.message })
 	}
 })
+
 
 // Simple Analytics Endpoints
 app.get('/api/admin/analytics/real-time', async (req, res) => {
