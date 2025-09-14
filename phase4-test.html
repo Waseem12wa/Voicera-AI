@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voicera AI Phase 4 - Microservices Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .service-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .service-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .service-card h3 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .status.healthy { background: #4CAF50; }
+        .status.error { background: #f44336; }
+        .status.unknown { background: #ff9800; }
+        .test-button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #1976D2;
+        }
+        .results {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .endpoint {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Voicera AI Phase 4 - Microservices Architecture</h1>
+            <p>Test and verify your microservices deployment</p>
+        </div>
+
+        <div class="service-grid">
+            <div class="service-card">
+                <h3>🎤 Voice Service</h3>
+                <div id="voice-status" class="status unknown">Checking...</div>
+                <button class="test-button" onclick="testService('voice')">Test Health</button>
+                <button class="test-button" onclick="testVoiceCommand()">Test Voice Command</button>
+                <div class="endpoint">Port: 3001<br>Health: /health<br>Process: /api/voice/process</div>
+            </div>
+
+            <div class="service-card">
+                <h3>👥 User Service</h3>
+                <div id="user-status" class="status unknown">Checking...</div>
+                <button class="test-button" onclick="testService('user')">Test Health</button>
+                <button class="test-button" onclick="testUsers()">Test Users</button>
+                <div class="endpoint">Port: 3002<br>Health: /health<br>Users: /api/users</div>
+            </div>
+
+            <div class="service-card">
+                <h3>📊 Analytics Service</h3>
+                <div id="analytics-status" class="status unknown">Checking...</div>
+                <button class="test-button" onclick="testService('analytics')">Test Health</button>
+                <button class="test-button" onclick="testAnalytics()">Test Analytics</button>
+                <div class="endpoint">Port: 3003<br>Health: /health<br>Real-time: /api/analytics/real-time</div>
+            </div>
+
+            <div class="service-card">
+                <h3>🌐 API Gateway</h3>
+                <div id="gateway-status" class="status unknown">Checking...</div>
+                <button class="test-button" onclick="testService('gateway')">Test Health</button>
+                <button class="test-button" onclick="testGateway()">Test Gateway</button>
+                <div class="endpoint">Port: 3000<br>Health: /health<br>Docs: /api/docs</div>
+            </div>
+        </div>
+
+        <div class="results">
+            <h3>📋 Test Results</h3>
+            <div id="test-results">
+                <p>Click the test buttons above to verify your microservices.</p>
+            </div>
+        </div>
+
+        <div class="results">
+            <h3>🛠️ Manual Setup Instructions</h3>
+            <div class="endpoint">
+                <strong>Step 1: Install Prerequisites</strong><br>
+                1. Install MongoDB: https://www.mongodb.com/try/download/community<br>
+                2. Install Redis: https://redis.io/download (or use Docker)<br>
+                3. Ensure Node.js 18+ is installed
+            </div>
+            <div class="endpoint">
+                <strong>Step 2: Start Services</strong><br>
+                1. Open 4 separate terminal windows<br>
+                2. Run each service:<br>
+                &nbsp;&nbsp;• Voice Service: cd microservices/voice-service && npm start<br>
+                &nbsp;&nbsp;• User Service: cd microservices/user-service && npm start<br>
+                &nbsp;&nbsp;• Analytics Service: cd microservices/analytics-service && npm start<br>
+                &nbsp;&nbsp;• API Gateway: cd microservices/api-gateway && npm start
+            </div>
+            <div class="endpoint">
+                <strong>Step 3: Test Services</strong><br>
+                Use the test buttons above or run:<br>
+                curl http://localhost:3000/health<br>
+                curl http://localhost:3001/health<br>
+                curl http://localhost:3002/health<br>
+                curl http://localhost:3003/health
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const services = {
+            voice: { port: 3001, name: 'Voice Service' },
+            user: { port: 3002, name: 'User Service' },
+            analytics: { port: 3003, name: 'Analytics Service' },
+            gateway: { port: 3000, name: 'API Gateway' }
+        };
+
+        async function testService(serviceName) {
+            const service = services[serviceName];
+            const statusElement = document.getElementById(`${serviceName}-status`);
+            
+            try {
+                statusElement.textContent = 'Testing...';
+                statusElement.className = 'status unknown';
+                
+                const response = await fetch(`http://localhost:${service.port}/health`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    statusElement.textContent = '✅ Healthy';
+                    statusElement.className = 'status healthy';
+                    addResult(`✅ ${service.name} is running on port ${service.port}`);
+                } else {
+                    statusElement.textContent = '❌ Error';
+                    statusElement.className = 'status error';
+                    addResult(`❌ ${service.name} returned status ${response.status}`);
+                }
+            } catch (error) {
+                statusElement.textContent = '❌ Not Running';
+                statusElement.className = 'status error';
+                addResult(`❌ ${service.name} is not running: ${error.message}`);
+            }
+        }
+
+        async function testVoiceCommand() {
+            try {
+                const response = await fetch('http://localhost:3000/api/voice/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: 'Show me my courses', userId: 'test-user' })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult(`✅ Voice command test successful: ${data.response}`);
+                } else {
+                    addResult(`❌ Voice command test failed: ${response.status}`);
+                }
+            } catch (error) {
+                addResult(`❌ Voice command test error: ${error.message}`);
+            }
+        }
+
+        async function testUsers() {
+            try {
+                const response = await fetch('http://localhost:3000/api/users');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult(`✅ Users test successful: Found ${data.users?.length || 0} users`);
+                } else {
+                    addResult(`❌ Users test failed: ${response.status}`);
+                }
+            } catch (error) {
+                addResult(`❌ Users test error: ${error.message}`);
+            }
+        }
+
+        async function testAnalytics() {
+            try {
+                const response = await fetch('http://localhost:3000/api/analytics/real-time');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult(`✅ Analytics test successful: ${data.activeUsers} active users`);
+                } else {
+                    addResult(`❌ Analytics test failed: ${response.status}`);
+                }
+            } catch (error) {
+                addResult(`❌ Analytics test error: ${error.message}`);
+            }
+        }
+
+        async function testGateway() {
+            try {
+                const response = await fetch('http://localhost:3000/api/docs');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult(`✅ Gateway test successful: ${data.name} v${data.version}`);
+                } else {
+                    addResult(`❌ Gateway test failed: ${response.status}`);
+                }
+            } catch (error) {
+                addResult(`❌ Gateway test error: ${error.message}`);
+            }
+        }
+
+        function addResult(message) {
+            const resultsDiv = document.getElementById('test-results');
+            const timestamp = new Date().toLocaleTimeString();
+            resultsDiv.innerHTML += `<div class="endpoint">[${timestamp}] ${message}</div>`;
+            resultsDiv.scrollTop = resultsDiv.scrollHeight;
+        }
+
+        // Auto-test all services on page load
+        window.onload = function() {
+            addResult('🚀 Starting microservices test...');
+            Object.keys(services).forEach(serviceName => {
+                setTimeout(() => testService(serviceName), 1000 * Object.keys(services).indexOf(serviceName));
+            });
+        };
+    </script>
+</body>
+</html>
