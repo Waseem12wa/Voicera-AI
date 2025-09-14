@@ -21,5 +21,7 @@ api.interceptors.request.use((config) => {
 	return config
 })
 
+// Export apiClient as both named and default export for compatibility
+export const apiClient = api
 export default api
 
