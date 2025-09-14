@@ -1,0 +1,38 @@
+{
+  "name": "api-gateway",
+  "version": "1.0.0",
+  "description": "API Gateway for Voicera AI microservices",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "build": "docker build -t api-gateway .",
+    "docker:run": "docker run -p 3000:3000 api-gateway"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "morgan": "^1.10.0",
+    "dotenv": "^16.4.5",
+    "helmet": "^7.1.0",
+    "compression": "^1.7.4",
+    "express-rate-limit": "^7.1.0",
+    "winston": "^3.11.0",
+    "prom-client": "^15.0.0",
+    "redis": "^4.6.0",
+    "ioredis": "^5.3.0",
+    "axios": "^1.11.0",
+    "http-proxy-middleware": "^2.0.6",
+    "circuit-breaker-js": "^0.1.0",
+    "express-validator": "^7.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "nanoid": "^5.1.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.0"
+  }
+}
