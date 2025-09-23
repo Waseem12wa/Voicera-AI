@@ -643,6 +643,89 @@ app.get('/api/teacher/files', async (req, res) => {
 	}
 })
 
+// Delete File/Content
+app.delete('/api/teacher/files/:id', async (req, res) => {
+	try {
+		const { id } = req.params
+		const teacherEmail = req.adminEmail
+		
+		// Find the file
+		const file = await File.findById(id)
+		if (!file) {
+			return res.status(404).json({ error: 'File not found' })
+		}
+		
+		// Check if teacher owns this file
+		if (file.teacherEmail !== teacherEmail) {
+			return res.status(403).json({ error: 'Unauthorized to delete this file' })
+		}
+		
+		// Delete physical file if it exists
+		if (file.fileName) {
+			const filePath = path.join(uploadDir, file.fileName)
+			if (fs.existsSync(filePath)) {
+				fs.unlinkSync(filePath)
+			}
+		}
+		
+		// Delete from database
+		await File.findByIdAndDelete(id)
+		
+		// Emit real-time notification
+		req.io.to(`teacher-${teacherEmail}`).emit('file-deleted', {
+			fileId: id,
+			fileName: file.originalName
+		})
+		
+		res.json({ success: true, message: 'File deleted successfully' })
+	} catch (error) {
+		console.error('Delete file error:', error)
+		res.status(500).json({ error: error.message })
+	}
+})
+
+// Delete Quiz
+app.delete('/api/teacher/quizzes/:id', async (req, res) => {
+	try {
+		const { id } = req.params
+		const teacherEmail = req.adminEmail
+		
+		// Find the quiz
+		const quiz = await Quiz.findById(id)
+		if (!quiz) {
+			return res.status(404).json({ error: 'Quiz not found' })
+		}
+		
+		// Check if teacher owns this quiz
+		if (quiz.teacherEmail !== teacherEmail) {
+			return res.status(403).json({ error: 'Unauthorized to delete this quiz' })
+		}
+		
+		// Delete related quiz assignments
+		await QuizAssignment.deleteMany({ quizId: id })
+		
+		// Delete related notifications
+		await Notification.deleteMany({ 
+			type: 'quiz_assigned',
+			'metadata.quizId': id 
+		})
+		
+		// Delete the quiz
+		await Quiz.findByIdAndDelete(id)
+		
+		// Emit real-time notification
+		req.io.to(`teacher-${teacherEmail}`).emit('quiz-deleted', {
+			quizId: id,
+			quizTitle: quiz.title
+		})
+		
+		res.json({ success: true, message: 'Quiz deleted successfully' })
+	} catch (error) {
+		console.error('Delete quiz error:', error)
+		res.status(500).json({ error: error.message })
+	}
+})
+
 // AI Response Management
 app.get('/api/teacher/interactions', async (req, res) => {
 	try {

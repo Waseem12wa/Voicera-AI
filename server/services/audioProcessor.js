@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
-import { AIService } from './aiService.js'
+import { createRequire } from 'module'
+const require = createRequire(import.meta.url)
 
 export class AudioProcessor {
 	/**
@@ -28,6 +29,7 @@ export class AudioProcessor {
 			const simulatedTranscript = this.generateSimulatedTranscript(fileName)
 			
 			// Analyze the transcript with AI
+			const { AIService } = require('./aiService.js')
 			const aiAnalysis = await AIService.analyzeFileContent(
 				simulatedTranscript,
 				fileName,
@@ -125,23 +127,35 @@ export class AudioProcessor {
 	 */
 	static async saveAudioFile(file) {
 		try {
-			const uploadsDir = path.join(process.cwd(), 'server', 'uploads')
-			
-			// Ensure uploads directory exists
-			if (!fs.existsSync(uploadsDir)) {
-				fs.mkdirSync(uploadsDir, { recursive: true })
+			// With multer diskStorage, the file is already saved to disk
+			// The file.path contains the full path to the saved file
+			if (file.path && fs.existsSync(file.path)) {
+				console.log(`Using existing file path: ${file.path}`)
+				return file.path
 			}
 			
-			// Generate unique filename
-			const timestamp = Date.now()
-			const fileExtension = path.extname(file.originalname)
-			const fileName = `${timestamp}-${file.originalname}`
-			const filePath = path.join(uploadsDir, fileName)
+			// Fallback: if file.path doesn't exist, try to save from buffer
+			if (file.buffer) {
+				const uploadsDir = path.join(process.cwd(), 'server', 'uploads')
+				
+				// Ensure uploads directory exists
+				if (!fs.existsSync(uploadsDir)) {
+					fs.mkdirSync(uploadsDir, { recursive: true })
+				}
+				
+				// Generate unique filename
+				const timestamp = Date.now()
+				const fileName = `${timestamp}-${file.originalname}`
+				const filePath = path.join(uploadsDir, fileName)
+				
+				// Save file from buffer
+				fs.writeFileSync(filePath, file.buffer)
+				console.log(`Saved file from buffer to: ${filePath}`)
+				
+				return filePath
+			}
 			
-			// Save file
-			fs.writeFileSync(filePath, file.buffer)
-			
-			return filePath
+			throw new Error('No file data available (neither path nor buffer)')
 			
 		} catch (error) {
 			console.error('Error saving audio file:', error)

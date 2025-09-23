@@ -5,8 +5,6 @@ import {
 	Paper,
 	Typography,
 	Stack,
-	IconButton,
-	LinearProgress,
 	Chip,
 	Dialog,
 	DialogTitle,
@@ -17,7 +15,6 @@ import {
 } from '@mui/material'
 import {
 	Mic as MicIcon,
-	MicOff as MicOffIcon,
 	Stop as StopIcon,
 	PlayArrow as PlayIcon,
 	Pause as PauseIcon,
@@ -44,7 +41,7 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ onTranscript, onAudioUpload, is
 	const mediaRecorderRef = useRef<MediaRecorder | null>(null)
 	const audioChunksRef = useRef<Blob[]>([])
 	const recognitionRef = useRef<SpeechRecognition | null>(null)
-	const timerRef = useRef<NodeJS.Timeout | null>(null)
+	const timerRef = useRef<number | null>(null)
 
 	// Check for browser support
 	const isSpeechRecognitionSupported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window
@@ -76,7 +73,33 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ onTranscript, onAudioUpload, is
 
 			recognitionRef.current.onerror = (event) => {
 				console.error('Speech recognition error:', event.error)
-				setError(`Speech recognition error: ${event.error}`)
+				let errorMessage = `Speech recognition error: ${event.error}`
+				
+				// Provide more helpful error messages
+				switch (event.error) {
+					case 'not-allowed':
+						errorMessage = 'Microphone access denied. Please allow microphone access and try again.'
+						break
+					case 'no-speech':
+						errorMessage = 'No speech detected. Please speak clearly into the microphone.'
+						break
+					case 'audio-capture':
+						errorMessage = 'Audio capture failed. Please check your microphone.'
+						break
+					case 'network':
+						errorMessage = 'Network error. Please check your internet connection.'
+						break
+					case 'service-not-allowed':
+						errorMessage = 'Speech recognition service not allowed. Please try again.'
+						break
+					case 'bad-grammar':
+						errorMessage = 'Speech recognition grammar error. Please try again.'
+						break
+					default:
+						errorMessage = `Speech recognition error: ${event.error}. Please try again.`
+				}
+				
+				setError(errorMessage)
 				setIsRecording(false)
 			}
 
@@ -117,6 +140,17 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ onTranscript, onAudioUpload, is
 			setTranscript('')
 			setRecordingTime(0)
 			setAudioBlob(null)
+
+			// Check browser support
+			if (!isSpeechRecognitionSupported) {
+				setError('Speech recognition not supported in this browser. Please use Chrome, Edge, or Safari.')
+				return
+			}
+			
+			if (!isMediaRecorderSupported) {
+				setError('Audio recording not supported in this browser. Please use Chrome, Edge, or Safari.')
+				return
+			}
 
 			// Start audio recording
 			if (isMediaRecorderSupported) {

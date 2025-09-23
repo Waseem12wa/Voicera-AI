@@ -103,16 +103,12 @@ export const getAssignedQuizzes = async () => {
 
 // Voice Content Processing
 export const processVoiceContent = async (transcript: string, audioBlob?: Blob) => {
-	const formData = new FormData()
-	formData.append('transcript', transcript)
-	
-	if (audioBlob) {
-		formData.append('audioBlob', audioBlob, 'voice-recording.wav')
-	}
-	
-	const response = await api.post('/teacher/voice-content', formData, {
+	const response = await api.post('/teacher/voice-content', {
+		transcript: transcript,
+		audioBlob: audioBlob
+	}, {
 		headers: {
-			'Content-Type': 'multipart/form-data'
+			'Content-Type': 'application/json'
 		}
 	})
 	return response.data
@@ -127,6 +123,17 @@ export const uploadAudioFile = async (audioFile: File) => {
 			'Content-Type': 'multipart/form-data'
 		}
 	})
+	return response.data
+}
+
+// Delete Functions
+export const deleteFile = async (fileId: string) => {
+	const response = await api.delete(`/teacher/files/${fileId}`)
+	return response.data
+}
+
+export const deleteQuiz = async (quizId: string) => {
+	const response = await api.delete(`/teacher/quizzes/${quizId}`)
 	return response.data
 }
 

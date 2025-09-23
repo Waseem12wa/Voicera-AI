@@ -1,5 +1,5 @@
-import { Box, Button, Paper, Stack, Tab, Tabs, Typography, List, ListItem, ListItemText, Chip, Card, CardContent, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Checkbox, FormControlLabel, Avatar, Badge } from '@mui/material'
-import { useState } from 'react'
+import { Box, Button, Paper, Stack, Tab, Tabs, Typography, List, ListItem, ListItemText, Chip, Card, CardContent, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Checkbox, FormControlLabel, Avatar, Badge, CircularProgress } from '@mui/material'
+import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
@@ -19,7 +19,9 @@ import {
 	assignQuizToMultipleStudents,
 	getAssignedQuizzes,
 	processVoiceContent,
-	uploadAudioFile
+	uploadAudioFile,
+	deleteFile,
+	deleteQuiz
 } from '../../services/teacherServiceEnhanced'
 import { 
 	Upload as UploadIcon,
@@ -33,7 +35,8 @@ import {
 	Circle as OnlineIcon,
 	Mic as MicIcon,
 	VolumeUp as VolumeIcon,
-	Description as DocumentIcon
+	Description as DocumentIcon,
+	Delete as DeleteIcon
 } from '@mui/icons-material'
 import VoiceInput from '../../components/voice/VoiceInput'
 
@@ -51,8 +54,11 @@ const EnhancedTeacherDashboard = () => {
 	const [selectedStudents, setSelectedStudents] = useState<string[]>([])
 	const [quizToAssign, setQuizToAssign] = useState<any>(null)
 	const [voiceDialogOpen, setVoiceDialogOpen] = useState(false)
-	const [voiceContent, setVoiceContent] = useState('')
 	const [voiceProcessing, setVoiceProcessing] = useState(false)
+	
+	// Delete confirmation states
+	const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+	const [itemToDelete, setItemToDelete] = useState<{type: 'file' | 'quiz', id: string, name: string} | null>(null)
 	
 	const qc = useQueryClient()
 	const dispatch = useDispatch()
@@ -65,9 +71,11 @@ const EnhancedTeacherDashboard = () => {
 	}
 
 	// Queries
-	const { data: filesData, refetch: refetchFiles } = useQuery({ 
+	const { data: filesData, refetch: refetchFiles, isLoading: filesLoading, error: filesError } = useQuery({ 
 		queryKey: ['teacher', 'files', selectedSection], 
-		queryFn: () => getFilesBySection(selectedSection === 'all' ? undefined : selectedSection)
+		queryFn: () => getFilesBySection(selectedSection === 'all' ? undefined : selectedSection),
+		retry: 3,
+		retryDelay: 1000
 	})
 	
 	const { data: interactions } = useQuery({ 
@@ -169,6 +177,41 @@ const EnhancedTeacherDashboard = () => {
 		},
 	})
 
+	// Delete mutations
+	const deleteFileMutation = useMutation({
+		mutationFn: deleteFile,
+		onSuccess: () => {
+			enqueueSnackbar('File deleted successfully!', { variant: 'success' })
+			qc.invalidateQueries({ queryKey: ['teacher', 'files'] })
+			setDeleteDialogOpen(false)
+			setItemToDelete(null)
+		},
+		onError: (error: any) => {
+			enqueueSnackbar(`Failed to delete file: ${error.message}`, { variant: 'error' })
+		}
+	})
+
+	const deleteQuizMutation = useMutation({
+		mutationFn: deleteQuiz,
+		onSuccess: () => {
+			enqueueSnackbar('Quiz deleted successfully!', { variant: 'success' })
+			qc.invalidateQueries({ queryKey: ['teacher', 'quizzes'] })
+			qc.invalidateQueries({ queryKey: ['teacher', 'assigned-quizzes'] })
+			setDeleteDialogOpen(false)
+			setItemToDelete(null)
+		},
+		onError: (error: any) => {
+			enqueueSnackbar(`Failed to delete quiz: ${error.message}`, { variant: 'error' })
+		}
+	})
+
+	// Ensure files are loaded on component mount
+	useEffect(() => {
+		if (!filesData && !filesLoading) {
+			refetchFiles()
+		}
+	}, [filesData, filesLoading, refetchFiles])
+
 	const sections = [
 		{ key: 'all', label: 'All Files', count: filesData?.files?.length || 0 },
 		{ key: 'lectures', label: 'Lectures', count: filesData?.sections?.lectures?.length || 0 },
@@ -228,7 +271,6 @@ const EnhancedTeacherDashboard = () => {
 	}
 
 	const handleVoiceTranscript = async (transcript: string, audioBlob?: Blob) => {
-		setVoiceContent(transcript)
 		setVoiceProcessing(true)
 		
 		try {
@@ -309,6 +351,35 @@ const EnhancedTeacherDashboard = () => {
 			enqueueSnackbar('Failed to process audio file', { variant: 'error' })
 		} finally {
 			setVoiceProcessing(false)
+		}
+	}
+
+	// Delete handlers
+	const handleDeleteFile = (file: any) => {
+		setItemToDelete({
+			type: 'file',
+			id: file._id,
+			name: file.title || file.originalName
+		})
+		setDeleteDialogOpen(true)
+	}
+
+	const handleDeleteQuiz = (quiz: any) => {
+		setItemToDelete({
+			type: 'quiz',
+			id: quiz._id,
+			name: quiz.title
+		})
+		setDeleteDialogOpen(true)
+	}
+
+	const confirmDelete = () => {
+		if (!itemToDelete) return
+
+		if (itemToDelete.type === 'file') {
+			deleteFileMutation.mutate(itemToDelete.id)
+		} else if (itemToDelete.type === 'quiz') {
+			deleteQuizMutation.mutate(itemToDelete.id)
 		}
 	}
 
@@ -472,8 +543,27 @@ const EnhancedTeacherDashboard = () => {
 					</Paper>
 
 					{/* Files Grid */}
-					<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 2 }}>
-						{(filesData?.files || []).map((file: any) => (
+					{filesLoading && (
+						<Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+							<CircularProgress />
+							<Typography sx={{ ml: 2 }}>Loading files...</Typography>
+						</Box>
+					)}
+					
+					{filesError && (
+						<Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+							<Typography color="error">
+								Failed to load files. 
+								<Button onClick={() => refetchFiles()} sx={{ ml: 1 }}>
+									Retry
+								</Button>
+							</Typography>
+						</Box>
+					)}
+					
+					{!filesLoading && !filesError && (
+						<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 2 }}>
+							{(filesData?.files || []).map((file: any) => (
 							<Card key={file._id} sx={{ height: '100%' }}>
 								<CardContent>
 									<Stack direction="row" justifyContent="space-between" alignItems="flex-start">
@@ -497,22 +587,41 @@ const EnhancedTeacherDashboard = () => {
 											)}
 										</Box>
 										<Stack direction="column" spacing={1}>
-											<IconButton 
+											<Button
+												variant="contained"
 												size="small"
+												startIcon={<QuizIcon />}
 												onClick={() => {
 													setSelectedFile(file)
 													setQuizDialogOpen(true)
 												}}
-												title="Generate Quiz"
+												sx={{ 
+													borderRadius: '20px',
+													fontSize: '0.75rem',
+													px: 1.5,
+													py: 0.5,
+													minWidth: 'auto',
+													bgcolor: 'primary.main',
+													'&:hover': { bgcolor: 'primary.dark' }
+												}}
 											>
-												<QuizIcon />
+												AI Quiz
+											</Button>
+											<IconButton 
+												size="small"
+												onClick={() => handleDeleteFile(file)}
+												title="Delete File"
+												color="error"
+											>
+												<DeleteIcon />
 											</IconButton>
 										</Stack>
 									</Stack>
 								</CardContent>
 							</Card>
 						))}
-					</Box>
+						</Box>
+					)}
 				</Box>
 			)}
 
@@ -664,6 +773,15 @@ const EnhancedTeacherDashboard = () => {
 											>
 												Assign to Students
 											</Button>
+											<IconButton 
+												size="small"
+												onClick={() => handleDeleteQuiz(quiz)}
+												title="Delete Quiz"
+												color="error"
+												sx={{ ml: 'auto' }}
+											>
+												<DeleteIcon />
+											</IconButton>
 										</Stack>
 
 										{quiz.questions && quiz.questions.length > 0 && (
@@ -1257,6 +1375,35 @@ const EnhancedTeacherDashboard = () => {
 				<DialogActions>
 					<Button onClick={() => setVoiceDialogOpen(false)}>
 						Close
+					</Button>
+				</DialogActions>
+			</Dialog>
+
+			{/* Delete Confirmation Dialog */}
+			<Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+				<DialogTitle>Confirm Delete</DialogTitle>
+				<DialogContent>
+					<Typography variant="body1">
+						Are you sure you want to delete <strong>{itemToDelete?.name}</strong>?
+					</Typography>
+					<Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+						{itemToDelete?.type === 'quiz' 
+							? 'This will also delete all related quiz assignments and notifications.'
+							: 'This action cannot be undone.'
+						}
+					</Typography>
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setDeleteDialogOpen(false)}>
+						Cancel
+					</Button>
+					<Button 
+						onClick={confirmDelete}
+						color="error"
+						variant="contained"
+						disabled={deleteFileMutation.isPending || deleteQuizMutation.isPending}
+					>
+						{deleteFileMutation.isPending || deleteQuizMutation.isPending ? 'Deleting...' : 'Delete'}
 					</Button>
 				</DialogActions>
 			</Dialog>
