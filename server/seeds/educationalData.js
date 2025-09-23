@@ -7,6 +7,9 @@ import File from '../models/File.js'
 import Quiz from '../models/Quiz.js'
 import StudentInteraction from '../models/StudentInteraction.js'
 import StudentNote from '../models/StudentNote.js'
+import Student from '../models/Student.js'
+import Notification from '../models/Notification.js'
+import QuizAssignment from '../models/QuizAssignment.js'
 
 // Real educational data from open sources
 const realEducationalData = {
@@ -278,6 +281,9 @@ export const seedDatabase = async () => {
     await Quiz.deleteMany({})
     await StudentInteraction.deleteMany({})
     await StudentNote.deleteMany({})
+    await Student.deleteMany({})
+    await Notification.deleteMany({})
+    await QuizAssignment.deleteMany({})
     
     console.log('🗑️ Cleared existing data')
     
@@ -337,24 +343,125 @@ export const seedDatabase = async () => {
     
     console.log('✅ Added quiz attempts')
     
+    // Create student records
+    const studentUsers = users.filter(u => u.role === 'student')
+    const studentRecords = await Promise.all(
+      studentUsers.map(async (user, index) => {
+        return await Student.create({
+          userId: user._id,
+          studentId: `STU${String(index + 1).padStart(3, '0')}`,
+          status: 'active',
+          isOnline: Math.random() > 0.5, // Random online status
+          lastActive: new Date(Date.now() - Math.random() * 24 * 60 * 60 * 1000),
+          profile: {
+            department: 'Computer Science',
+            year: ['Freshman', 'Sophomore', 'Junior', 'Senior'][Math.floor(Math.random() * 4)],
+            semester: 'Spring 2024',
+            gpa: 3.0 + Math.random() * 1.5
+          },
+          preferences: {
+            notifications: {
+              email: true,
+              push: true,
+              quizAssignments: true,
+              announcements: true
+            },
+            learningStyle: ['visual', 'auditory', 'kinesthetic'][Math.floor(Math.random() * 3)],
+            pace: ['slow', 'medium', 'fast'][Math.floor(Math.random() * 3)]
+          }
+        })
+      })
+    )
+    console.log(`✅ Created ${studentRecords.length} student records`)
+    
+    // Create sample notifications
+    const sampleNotifications = [
+      {
+        recipientId: studentUsers[0]._id,
+        recipientEmail: studentUsers[0].email,
+        type: 'quiz_assignment',
+        title: 'New Quiz Assignment',
+        message: 'A quiz has been assigned to you. Please solve it.',
+        data: {
+          quizId: quizzes[0]._id,
+          metadata: {
+            quizTitle: quizzes[0].title,
+            assignmentType: 'quiz'
+          }
+        },
+        priority: 'high',
+        read: false
+      },
+      {
+        recipientId: studentUsers[1]._id,
+        recipientEmail: studentUsers[1].email,
+        type: 'announcement',
+        title: 'Course Update',
+        message: 'New materials have been uploaded to your course.',
+        data: {
+          courseId: courses[0]._id,
+          metadata: {
+            announcementType: 'course_update'
+          }
+        },
+        priority: 'medium',
+        read: true,
+        readAt: new Date(Date.now() - 2 * 60 * 60 * 1000)
+      },
+      {
+        recipientId: studentUsers[2]._id,
+        recipientEmail: studentUsers[2].email,
+        type: 'quiz_assignment',
+        title: 'New Quiz Assignment',
+        message: 'A quiz has been assigned to you. Please solve it.',
+        data: {
+          quizId: quizzes[1]._id,
+          metadata: {
+            quizTitle: quizzes[1].title,
+            assignmentType: 'quiz'
+          }
+        },
+        priority: 'high',
+        read: false
+      }
+    ]
+    
+    const notifications = await Notification.insertMany(sampleNotifications)
+    console.log(`✅ Created ${notifications.length} notifications`)
+    
+    // Create sample quiz assignment
+    const quizAssignment = await QuizAssignment.createAssignment(
+      quizzes[0]._id,
+      users.find(u => u.email === 'sarah.johnson@stanford.edu')._id,
+      'sarah.johnson@stanford.edu',
+      studentUsers.slice(0, 3).map(s => ({ studentId: s._id, studentEmail: s.email }))
+    )
+    console.log('✅ Created quiz assignment')
+    
     console.log('🎉 Database seeding completed successfully!')
     console.log('\n📊 Summary:')
     console.log(`- ${institutions.length} institutions`)
     console.log(`- ${programs.length} programs`)
     console.log(`- ${courses.length} courses`)
     console.log(`- ${users.length} users`)
+    console.log(`- ${studentRecords.length} student records`)
     console.log(`- ${files.length} files`)
     console.log(`- ${quizzes.length} quizzes`)
     console.log(`- ${interactions.length} interactions`)
+    console.log(`- ${notifications.length} notifications`)
+    console.log(`- 1 quiz assignment`)
     
     return {
       institutions,
       programs,
       courses,
       users,
+      studentRecords,
       files,
       quizzes,
-      interactions
+      interactions,
+      notifications,
+      quizAssignment
     }
   } catch (error) {
     console.error('❌ Database seeding failed:', error)

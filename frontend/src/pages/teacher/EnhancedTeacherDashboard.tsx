@@ -1,7 +1,10 @@
-import { Box, Button, Paper, Stack, Tab, Tabs, Typography, List, ListItem, ListItemText, Chip, Card, CardContent, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from '@mui/material'
+import { Box, Button, Paper, Stack, Tab, Tabs, Typography, List, ListItem, ListItemText, Chip, Card, CardContent, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Checkbox, FormControlLabel, Avatar, Badge } from '@mui/material'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useDispatch } from 'react-redux'
+import { useNavigate } from 'react-router-dom'
 import { enqueueSnackbar } from 'notistack'
+import { logout } from '../../features/auth/authSlice'
 import { 
 	uploadFiles, 
 	getFilesBySection, 
@@ -10,14 +13,29 @@ import {
 	approveAIResponse,
 	generateQuizFromFile,
 	getQuizzes,
-	getEnhancedAnalytics
+	getEnhancedAnalytics,
+	getRegisteredStudents,
+	getActiveStudents,
+	assignQuizToMultipleStudents,
+	getAssignedQuizzes,
+	processVoiceContent,
+	uploadAudioFile
 } from '../../services/teacherServiceEnhanced'
 import { 
 	Upload as UploadIcon,
 	Quiz as QuizIcon,
 	QuestionAnswer as QAIcon,
-	CheckCircle as CheckIcon
+	CheckCircle as CheckIcon,
+	People as PeopleIcon,
+	Assignment as AssignmentIcon,
+	Send as SendIcon,
+	Person as PersonIcon,
+	Circle as OnlineIcon,
+	Mic as MicIcon,
+	VolumeUp as VolumeIcon,
+	Description as DocumentIcon
 } from '@mui/icons-material'
+import VoiceInput from '../../components/voice/VoiceInput'
 
 const EnhancedTeacherDashboard = () => {
 	const [tab, setTab] = useState(0)
@@ -29,8 +47,22 @@ const EnhancedTeacherDashboard = () => {
 	const [newContext, setNewContext] = useState('')
 	const [viewQuestionsDialogOpen, setViewQuestionsDialogOpen] = useState(false)
 	const [selectedQuiz, setSelectedQuiz] = useState<any>(null)
+	const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false)
+	const [selectedStudents, setSelectedStudents] = useState<string[]>([])
+	const [quizToAssign, setQuizToAssign] = useState<any>(null)
+	const [voiceDialogOpen, setVoiceDialogOpen] = useState(false)
+	const [voiceContent, setVoiceContent] = useState('')
+	const [voiceProcessing, setVoiceProcessing] = useState(false)
 	
 	const qc = useQueryClient()
+	const dispatch = useDispatch()
+	const navigate = useNavigate()
+
+	const handleLogout = () => {
+		dispatch(logout())
+		navigate('/login')
+		enqueueSnackbar('Logged out successfully', { variant: 'success' })
+	}
 
 	// Queries
 	const { data: filesData, refetch: refetchFiles } = useQuery({ 
@@ -51,6 +83,21 @@ const EnhancedTeacherDashboard = () => {
 	const { data: quizzes } = useQuery({ 
 		queryKey: ['teacher', 'quizzes'], 
 		queryFn: getQuizzes
+	})
+	
+	const { data: registeredStudents } = useQuery({ 
+		queryKey: ['teacher', 'students', 'registered'], 
+		queryFn: getRegisteredStudents
+	})
+	
+	const { data: activeStudents } = useQuery({ 
+		queryKey: ['teacher', 'students', 'active'], 
+		queryFn: getActiveStudents
+	})
+	
+	const { data: assignedQuizzes } = useQuery({ 
+		queryKey: ['teacher', 'assigned-quizzes'], 
+		queryFn: getAssignedQuizzes
 	})
 
 	// Mutations
@@ -105,6 +152,23 @@ const EnhancedTeacherDashboard = () => {
 		},
 	})
 
+	const assignQuizMutation = useMutation({
+		mutationFn: ({ quizId, studentIds }: { quizId: string; studentIds: string[] }) => 
+			assignQuizToMultipleStudents(quizId, studentIds),
+		onSuccess: async () => {
+			enqueueSnackbar('Quiz assigned successfully! Students will receive notifications.', { variant: 'success' })
+			await qc.invalidateQueries({ queryKey: ['teacher', 'assigned-quizzes'] })
+			setAssignmentDialogOpen(false)
+			setSelectedStudents([])
+			setQuizToAssign(null)
+		},
+		onError: (error: any) => {
+			console.error('Quiz assignment error:', error)
+			const errorMessage = error?.response?.data?.error || error?.message || 'Failed to assign quiz'
+			enqueueSnackbar(errorMessage, { variant: 'error' })
+		},
+	})
+
 	const sections = [
 		{ key: 'all', label: 'All Files', count: filesData?.files?.length || 0 },
 		{ key: 'lectures', label: 'Lectures', count: filesData?.sections?.lectures?.length || 0 },
@@ -141,6 +205,113 @@ const EnhancedTeacherDashboard = () => {
 		setViewQuestionsDialogOpen(true)
 	}
 
+	const handleAssignQuiz = (quiz: any) => {
+		setQuizToAssign(quiz)
+		setAssignmentDialogOpen(true)
+	}
+
+	const handleStudentSelection = (studentId: string) => {
+		setSelectedStudents(prev => 
+			prev.includes(studentId) 
+				? prev.filter(id => id !== studentId)
+				: [...prev, studentId]
+		)
+	}
+
+	const handleAssignToStudents = () => {
+		if (quizToAssign && selectedStudents.length > 0) {
+			assignQuizMutation.mutate({
+				quizId: quizToAssign._id,
+				studentIds: selectedStudents
+			})
+		}
+	}
+
+	const handleVoiceTranscript = async (transcript: string, audioBlob?: Blob) => {
+		setVoiceContent(transcript)
+		setVoiceProcessing(true)
+		
+		try {
+			// Process voice content with backend API
+			const response = await processVoiceContent(transcript, audioBlob)
+			
+			if (response.success) {
+				// Create a virtual file object for voice content
+				const voiceFile = {
+					_id: response.file._id,
+					title: response.file.title,
+					originalName: response.file.originalName,
+					content: transcript,
+					aiAnalysis: response.analysis,
+					section: 'voice',
+					type: 'voice',
+					transcript: transcript,
+					isVoiceContent: true
+				}
+				
+				enqueueSnackbar('Voice content processed successfully!', { variant: 'success' })
+				
+				// Refresh files list
+				await qc.invalidateQueries({ queryKey: ['teacher', 'files'] })
+				
+				// Generate quiz from voice content
+				setSelectedFile(voiceFile)
+				setQuizDialogOpen(true)
+			} else {
+				throw new Error('Failed to process voice content')
+			}
+			
+		} catch (error) {
+			console.error('Voice processing error:', error)
+			enqueueSnackbar('Failed to process voice content', { variant: 'error' })
+		} finally {
+			setVoiceProcessing(false)
+		}
+	}
+
+	const handleAudioUpload = async (audioFile: File) => {
+		setVoiceProcessing(true)
+		
+		try {
+			enqueueSnackbar('Audio file uploaded successfully! Processing...', { variant: 'info' })
+			
+			// Upload audio file to backend for processing
+			const response = await uploadAudioFile(audioFile)
+			
+			if (response.uploaded > 0) {
+				enqueueSnackbar('Audio file processed successfully!', { variant: 'success' })
+				
+				// Refresh files list to show the new audio file
+				await qc.invalidateQueries({ queryKey: ['teacher', 'files'] })
+				
+				// Wait a moment for the file to be processed
+				setTimeout(async () => {
+					try {
+						// Get the processed file
+						const filesResponse = await getFilesBySection('audio')
+						const audioFileObj = filesResponse.files.find((f: any) => f.originalName === audioFile.name)
+						
+						if (audioFileObj) {
+							// Generate quiz from audio content
+							setSelectedFile(audioFileObj)
+							setQuizDialogOpen(true)
+						}
+					} catch (error) {
+						console.error('Error getting processed audio file:', error)
+					}
+				}, 3000)
+			} else {
+				throw new Error('Failed to upload audio file')
+			}
+			
+		} catch (error) {
+			console.error('Audio processing error:', error)
+			enqueueSnackbar('Failed to process audio file', { variant: 'error' })
+		} finally {
+			setVoiceProcessing(false)
+		}
+	}
+
 	return (
 		<Box sx={{ 
 			my: 2, 
@@ -151,6 +322,24 @@ const EnhancedTeacherDashboard = () => {
 			flexDirection: 'column',
 			alignItems: 'center'
 		}}>
+			{/* Logout Button - Top Right */}
+			<Box sx={{ position: 'fixed', top: 20, right: 20, zIndex: 1000 }}>
+				<Button 
+					onClick={handleLogout}
+					variant="contained"
+					color="error"
+					sx={{ 
+						borderRadius: '50px',
+						fontWeight: 'bold',
+						px: 3,
+						py: 1,
+						boxShadow: 3
+					}}
+				>
+					🚪 Logout
+				</Button>
+			</Box>
+			
 			<Typography variant="h5" mb={2} sx={{ textAlign: 'center', fontWeight: 'bold' }}>
 				Enhanced Teacher Dashboard
 			</Typography>
@@ -159,6 +348,7 @@ const EnhancedTeacherDashboard = () => {
 				<Tab label="Files & Content" />
 				<Tab label="AI Interactions" />
 				<Tab label="Generated Quizzes" />
+				<Tab label="Student Management" />
 				<Tab label="Analytics" />
 			</Tabs>
 
@@ -182,26 +372,102 @@ const EnhancedTeacherDashboard = () => {
 						))}
 					</Stack>
 
-					{/* Upload Section */}
-					<Paper sx={{ p: 2, mb: 2 }}>
-						<Stack direction="row" spacing={2} alignItems="center">
-							<Button 
-								variant="outlined" 
-								component="label"
-								startIcon={<UploadIcon />}
-								sx={{ 
-									borderRadius: '50px',
-									fontWeight: 'bold',
-									px: 3,
-									py: 1
-								}}
-							>
-								Upload Files
-								<input hidden multiple type="file" accept=".pdf,.ppt,.pptx,.doc,.docx,.txt" onChange={handleFileUpload} />
-							</Button>
-							<Typography variant="body2" color="text.secondary">
-								Upload lecture notes, assignments, and resources. AI will automatically organize and analyze them.
-							</Typography>
+					{/* Content Input Options */}
+					<Paper sx={{ p: 3, mb: 2 }}>
+						<Typography variant="h6" gutterBottom>
+							📚 Add Content for AI Analysis
+						</Typography>
+						<Typography variant="body2" color="text.secondary" gutterBottom>
+							Choose how you want to add content. All options support AI-powered quiz generation.
+						</Typography>
+						
+						<Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mt: 2 }}>
+							{/* Option 1: Upload Files */}
+							<Paper sx={{ p: 2, flex: 1, border: '2px solid', borderColor: 'primary.main' }}>
+								<Stack alignItems="center" spacing={2}>
+									<DocumentIcon sx={{ fontSize: 40, color: 'primary.main' }} />
+									<Typography variant="h6" align="center">
+										📄 Upload Files
+									</Typography>
+									<Typography variant="body2" color="text.secondary" align="center">
+										Upload documents (PDF, PPT, DOC, TXT) for AI analysis
+									</Typography>
+									<Button
+										variant="contained"
+										startIcon={<UploadIcon />}
+										component="label"
+										sx={{ 
+											borderRadius: '50px',
+											fontWeight: 'bold',
+											px: 3,
+											py: 1
+										}}
+									>
+										Choose Files
+										<input hidden multiple type="file" accept=".pdf,.ppt,.pptx,.doc,.docx,.txt" onChange={handleFileUpload} />
+									</Button>
+								</Stack>
+							</Paper>
+
+							{/* Option 2: Voice Recording */}
+							<Paper sx={{ p: 2, flex: 1, border: '2px solid', borderColor: 'success.main' }}>
+								<Stack alignItems="center" spacing={2}>
+									<MicIcon sx={{ fontSize: 40, color: 'success.main' }} />
+									<Typography variant="h6" align="center">
+										🎤 Speak Voice
+									</Typography>
+									<Typography variant="body2" color="text.secondary" align="center">
+										Record your voice directly in the browser
+									</Typography>
+									<Button
+										variant="contained"
+										startIcon={<MicIcon />}
+										onClick={() => setVoiceDialogOpen(true)}
+										sx={{ 
+											borderRadius: '50px',
+											fontWeight: 'bold',
+											px: 3,
+											py: 1,
+											bgcolor: 'success.main',
+											'&:hover': { bgcolor: 'success.dark' }
+										}}
+									>
+										Start Recording
+									</Button>
+								</Stack>
+							</Paper>
+
+							{/* Option 3: Upload Audio */}
+							<Paper sx={{ p: 2, flex: 1, border: '2px solid', borderColor: 'warning.main' }}>
+								<Stack alignItems="center" spacing={2}>
+									<VolumeIcon sx={{ fontSize: 40, color: 'warning.main' }} />
+									<Typography variant="h6" align="center">
+										🎵 Upload Audio
+									</Typography>
+									<Typography variant="body2" color="text.secondary" align="center">
+										Upload audio files (MP3, WAV, M4A) up to 100MB
+									</Typography>
+									<Button
+										variant="contained"
+										startIcon={<VolumeIcon />}
+										component="label"
+										sx={{ 
+											borderRadius: '50px',
+											fontWeight: 'bold',
+											px: 3,
+											py: 1,
+											bgcolor: 'warning.main',
+											'&:hover': { bgcolor: 'warning.dark' }
+										}}
+									>
+										Upload Audio
+										<input hidden type="file" accept="audio/*" onChange={(e) => {
+											const file = e.target.files?.[0]
+											if (file) handleAudioUpload(file)
+										}} />
+									</Button>
+								</Stack>
+							</Paper>
 						</Stack>
 					</Paper>
 
@@ -387,6 +653,8 @@ const EnhancedTeacherDashboard = () => {
 											<Button 
 												variant="contained" 
 												size="small"
+												onClick={() => handleAssignQuiz(quiz)}
+												startIcon={<SendIcon />}
 												sx={{ 
 													borderRadius: '50px',
 													fontWeight: 'bold',
@@ -448,8 +716,205 @@ const EnhancedTeacherDashboard = () => {
 				</Box>
 			)}
 
-			{/* Analytics Tab */}
+			{/* Student Management Tab */}
 			{tab === 3 && (
+				<Box sx={{ width: '100%' }}>
+					<Paper sx={{ p: 2, mb: 2 }}>
+						<Typography variant="h6" gutterBottom>
+							👥 Student Management & Quiz Assignment
+						</Typography>
+						<Typography variant="body2" color="text.secondary">
+							View registered and active students, and assign quizzes to them.
+						</Typography>
+					</Paper>
+
+					{/* Registered Students */}
+					<Paper sx={{ p: 2, mb: 2 }}>
+						<Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+							<PeopleIcon color="primary" />
+							<Typography variant="h6">
+								Registered Students ({registeredStudents?.length || 0})
+							</Typography>
+						</Stack>
+						
+						<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 2 }}>
+							{(registeredStudents || []).map((student: any) => (
+								<Card key={student._id} sx={{ height: '100%' }}>
+									<CardContent>
+										<Stack spacing={2}>
+											<Stack direction="row" alignItems="center" spacing={2}>
+												<Avatar sx={{ bgcolor: 'primary.main' }}>
+													<PersonIcon />
+												</Avatar>
+												<Box>
+													<Typography variant="h6" gutterBottom>
+														{student.name}
+													</Typography>
+													<Typography variant="body2" color="text.secondary">
+														{student.email}
+													</Typography>
+												</Box>
+											</Stack>
+											
+											<Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+												<Chip 
+													label={student.role} 
+													size="small" 
+													color="primary" 
+												/>
+												<Chip 
+													label={`Joined: ${new Date(student.createdAt).toLocaleDateString()}`} 
+													size="small" 
+													variant="outlined"
+												/>
+											</Stack>
+										</Stack>
+									</CardContent>
+								</Card>
+							))}
+						</Box>
+
+						{(!registeredStudents || registeredStudents.length === 0) && (
+							<Box sx={{ textAlign: 'center', py: 4 }}>
+								<PeopleIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+								<Typography variant="h6" gutterBottom>
+									No Registered Students
+								</Typography>
+								<Typography variant="body2" color="text.secondary">
+									Students will appear here once they register for your courses.
+								</Typography>
+							</Box>
+						)}
+					</Paper>
+
+					{/* Active Students */}
+					<Paper sx={{ p: 2, mb: 2 }}>
+						<Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+							<OnlineIcon color="success" />
+							<Typography variant="h6">
+								Currently Active Students ({activeStudents?.length || 0})
+							</Typography>
+						</Stack>
+						
+						<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 2 }}>
+							{(activeStudents || []).map((student: any) => (
+								<Card key={student._id} sx={{ height: '100%', border: '2px solid', borderColor: 'success.main' }}>
+									<CardContent>
+										<Stack spacing={2}>
+											<Stack direction="row" alignItems="center" spacing={2}>
+												<Badge
+													overlap="circular"
+													anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+													variant="dot"
+													color="success"
+												>
+													<Avatar sx={{ bgcolor: 'success.main' }}>
+														<PersonIcon />
+													</Avatar>
+												</Badge>
+												<Box>
+													<Typography variant="h6" gutterBottom>
+														{student.name}
+													</Typography>
+													<Typography variant="body2" color="text.secondary">
+														{student.email}
+													</Typography>
+												</Box>
+											</Stack>
+											
+											<Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+												<Chip 
+													label="Online Now" 
+													size="small" 
+													color="success" 
+												/>
+												<Chip 
+													label={`Last active: ${new Date(student.lastActive).toLocaleTimeString()}`} 
+													size="small" 
+													variant="outlined"
+												/>
+											</Stack>
+										</Stack>
+									</CardContent>
+								</Card>
+							))}
+						</Box>
+
+						{(!activeStudents || activeStudents.length === 0) && (
+							<Box sx={{ textAlign: 'center', py: 4 }}>
+								<OnlineIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+								<Typography variant="h6" gutterBottom>
+									No Active Students
+								</Typography>
+								<Typography variant="body2" color="text.secondary">
+									Students who are currently online will appear here.
+								</Typography>
+							</Box>
+						)}
+					</Paper>
+
+					{/* Assigned Quizzes */}
+					<Paper sx={{ p: 2 }}>
+						<Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+							<AssignmentIcon color="secondary" />
+							<Typography variant="h6">
+								Recently Assigned Quizzes ({assignedQuizzes?.length || 0})
+							</Typography>
+						</Stack>
+						
+						<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: 2 }}>
+							{(assignedQuizzes || []).map((assignment: any) => (
+								<Card key={assignment._id} sx={{ height: '100%' }}>
+									<CardContent>
+										<Stack spacing={2}>
+											<Box>
+												<Typography variant="h6" gutterBottom>
+													{assignment.quiz?.title}
+												</Typography>
+												<Typography variant="body2" color="text.secondary" gutterBottom>
+													Assigned to {assignment.students?.length || 0} students
+												</Typography>
+											</Box>
+											
+											<Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+												<Chip 
+													label={`${assignment.quiz?.questions?.length || 0} questions`} 
+													size="small" 
+													color="primary" 
+												/>
+												<Chip 
+													label={`Assigned: ${new Date(assignment.assignedAt).toLocaleDateString()}`} 
+													size="small" 
+													variant="outlined"
+												/>
+											</Stack>
+
+											<Typography variant="caption" color="text.secondary">
+												Students: {assignment.students?.map((s: any) => s.name).join(', ') || 'None'}
+											</Typography>
+										</Stack>
+									</CardContent>
+								</Card>
+							))}
+						</Box>
+
+						{(!assignedQuizzes || assignedQuizzes.length === 0) && (
+							<Box sx={{ textAlign: 'center', py: 4 }}>
+								<AssignmentIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+								<Typography variant="h6" gutterBottom>
+									No Assigned Quizzes
+								</Typography>
+								<Typography variant="body2" color="text.secondary">
+									Quizzes you assign to students will appear here.
+								</Typography>
+							</Box>
+						)}
+					</Paper>
+				</Box>
+			)}
+
+			{/* Analytics Tab */}
+			{tab === 4 && (
 				<Box sx={{ width: '100%' }}>
 					{analytics && (
 						<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2 }}>
@@ -636,6 +1101,161 @@ const EnhancedTeacherDashboard = () => {
 				</DialogContent>
 				<DialogActions>
 					<Button onClick={() => setViewQuestionsDialogOpen(false)}>
+						Close
+					</Button>
+				</DialogActions>
+			</Dialog>
+
+			{/* Quiz Assignment Dialog */}
+			<Dialog open={assignmentDialogOpen} onClose={() => setAssignmentDialogOpen(false)} maxWidth="md" fullWidth>
+				<DialogTitle>
+					<Stack direction="row" alignItems="center" spacing={1}>
+						<AssignmentIcon />
+						<Typography variant="h6">
+							Assign Quiz to Students
+						</Typography>
+					</Stack>
+					<Typography variant="subtitle2" color="text.secondary">
+						Quiz: {quizToAssign?.title}
+					</Typography>
+				</DialogTitle>
+				<DialogContent>
+					<Stack spacing={3} sx={{ mt: 1 }}>
+						<Typography variant="body2" color="text.secondary">
+							Select students to assign this quiz to. They will receive a notification when the quiz is assigned.
+						</Typography>
+
+						{/* Registered Students Selection */}
+						<Box>
+							<Typography variant="h6" gutterBottom>
+								Registered Students ({registeredStudents?.length || 0})
+							</Typography>
+							<Box sx={{ maxHeight: 300, overflow: 'auto', border: '1px solid #e0e0e0', borderRadius: 1, p: 1 }}>
+								{(registeredStudents || []).map((student: any) => (
+									<FormControlLabel
+										key={student._id}
+										control={
+											<Checkbox
+												checked={selectedStudents.includes(student._id)}
+												onChange={() => handleStudentSelection(student._id)}
+											/>
+										}
+										label={
+											<Stack direction="row" alignItems="center" spacing={1}>
+												<Avatar sx={{ width: 24, height: 24, bgcolor: 'primary.main' }}>
+													<PersonIcon fontSize="small" />
+												</Avatar>
+												<Box>
+													<Typography variant="body2" fontWeight={600}>
+														{student.name}
+													</Typography>
+													<Typography variant="caption" color="text.secondary">
+														{student.email}
+													</Typography>
+												</Box>
+											</Stack>
+										}
+										sx={{ width: '100%', m: 0 }}
+									/>
+								))}
+							</Box>
+						</Box>
+
+						{/* Active Students Selection */}
+						<Box>
+							<Typography variant="h6" gutterBottom>
+								Currently Active Students ({activeStudents?.length || 0})
+							</Typography>
+							<Box sx={{ maxHeight: 200, overflow: 'auto', border: '1px solid #e0e0e0', borderRadius: 1, p: 1 }}>
+								{(activeStudents || []).map((student: any) => (
+									<FormControlLabel
+										key={student._id}
+										control={
+											<Checkbox
+												checked={selectedStudents.includes(student._id)}
+												onChange={() => handleStudentSelection(student._id)}
+											/>
+										}
+										label={
+											<Stack direction="row" alignItems="center" spacing={1}>
+												<Badge
+													overlap="circular"
+													anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+													variant="dot"
+													color="success"
+												>
+													<Avatar sx={{ width: 24, height: 24, bgcolor: 'success.main' }}>
+														<PersonIcon fontSize="small" />
+													</Avatar>
+												</Badge>
+												<Box>
+													<Typography variant="body2" fontWeight={600}>
+														{student.name}
+													</Typography>
+													<Typography variant="caption" color="text.secondary">
+														{student.email} • Online Now
+													</Typography>
+												</Box>
+											</Stack>
+										}
+										sx={{ width: '100%', m: 0 }}
+									/>
+								))}
+							</Box>
+						</Box>
+
+						{selectedStudents.length > 0 && (
+							<Paper sx={{ p: 2, bgcolor: 'primary.50' }}>
+								<Typography variant="body2" color="primary">
+									✅ {selectedStudents.length} student{selectedStudents.length > 1 ? 's' : ''} selected for quiz assignment
+								</Typography>
+							</Paper>
+						)}
+					</Stack>
+				</DialogContent>
+				<DialogActions>
+					<Button 
+						onClick={() => setAssignmentDialogOpen(false)}
+						disabled={assignQuizMutation.isPending}
+					>
+						Cancel
+					</Button>
+					<Button 
+						onClick={handleAssignToStudents}
+						variant="contained"
+						disabled={assignQuizMutation.isPending || selectedStudents.length === 0}
+						startIcon={<SendIcon />}
+						sx={{ 
+							borderRadius: '50px',
+							fontWeight: 'bold',
+							px: 3,
+							py: 1
+						}}
+					>
+						{assignQuizMutation.isPending ? 'Assigning...' : `Assign to ${selectedStudents.length} Student${selectedStudents.length > 1 ? 's' : ''}`}
+					</Button>
+				</DialogActions>
+			</Dialog>
+
+			{/* Voice Input Dialog */}
+			<Dialog open={voiceDialogOpen} onClose={() => setVoiceDialogOpen(false)} maxWidth="md" fullWidth>
+				<DialogTitle>
+					<Typography variant="h5" gutterBottom>
+						🎤 Voice Recording & Audio Upload
+					</Typography>
+					<Typography variant="subtitle2" color="text.secondary">
+						Record your voice or upload audio files for AI analysis and quiz generation
+					</Typography>
+				</DialogTitle>
+				<DialogContent>
+					<VoiceInput
+						onTranscript={handleVoiceTranscript}
+						onAudioUpload={handleAudioUpload}
+						isProcessing={voiceProcessing}
+					/>
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setVoiceDialogOpen(false)}>
 						Close
 					</Button>
 				</DialogActions>

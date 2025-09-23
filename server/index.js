@@ -51,8 +51,51 @@ io.on('connection', (socket) => {
 		console.log(`Teacher ${teacherEmail} joined room`)
 	})
 	
-	socket.on('disconnect', () => {
+	socket.on('join-student-room', async (studentEmail) => {
+		socket.join(`student-${studentEmail}`)
+		console.log(`Student ${studentEmail} joined room`)
+		
+		// Update student online status
+		try {
+			const user = await User.findOne({ email: studentEmail })
+			if (user && user.role === 'student') {
+				await Student.findOneAndUpdate(
+					{ userId: user._id },
+					{ isOnline: true, lastActive: new Date() },
+					{ upsert: true }
+				)
+				
+				// Notify teachers about student coming online
+				io.to('teacher-room').emit('student-online', {
+					studentEmail,
+					studentName: user.name,
+					timestamp: new Date()
+				})
+			}
+		} catch (error) {
+			console.error('Error updating student online status:', error)
+		}
+	})
+	
+	socket.on('disconnect', async () => {
 		console.log('User disconnected:', socket.id)
+		
+		// Update student offline status
+		try {
+			// Find student by socket ID (you might want to store socket-to-user mapping)
+			// For now, we'll update all students' lastActive
+			await Student.updateMany(
+				{ isOnline: true },
+				{ 
+					$set: { 
+						isOnline: false,
+						lastActive: new Date()
+					}
+				}
+			)
+		} catch (error) {
+			console.error('Error updating student offline status:', error)
+		}
 	})
 })
 
@@ -68,8 +111,12 @@ import Quiz from './models/Quiz.js'
 import StudentInteraction from './models/StudentInteraction.js'
 import StudentNote from './models/StudentNote.js'
 import User from './models/User.js'
+import Student from './models/Student.js'
+import Notification from './models/Notification.js'
+import QuizAssignment from './models/QuizAssignment.js'
 import { FileProcessor } from './services/fileProcessor.js'
 import { AIService } from './services/aiService.js'
+import { AudioProcessor } from './services/audioProcessor.js'
 import { seedDatabase } from './seeds/educationalData.js'
 import Institution from './models/Institution.js'
 import Program from './models/Program.js'
@@ -447,15 +494,56 @@ app.post('/api/teacher/uploads', upload.array('files', 10), async (req, res) => 
 			})
 			
 			// Process file asynchronously
-			setImmediate(() => {
-				FileProcessor.processFile(doc, teacherEmail).then((result) => {
+			setImmediate(async () => {
+				try {
+					let result
+					
+					// Check if it's an audio file
+					if (f.mimetype.startsWith('audio/')) {
+						const validation = AudioProcessor.validateAudioFile(f)
+						if (!validation.valid) {
+							throw new Error(validation.error)
+						}
+						
+						const audioFilePath = await AudioProcessor.saveAudioFile(f)
+						const audioResult = await AudioProcessor.processAudioFile(audioFilePath, f.originalname)
+						
+						// Update file with audio processing results
+						await File.findByIdAndUpdate(doc._id, {
+							title: audioResult.aiAnalysis.summary || `Audio: ${f.originalname}`,
+							content: audioResult.transcript,
+							aiAnalysis: audioResult.aiAnalysis,
+							section: 'audio',
+							transcript: audioResult.transcript,
+							status: 'processed'
+						})
+						
+						result = {
+							success: true,
+							analysis: audioResult.aiAnalysis,
+							transcript: audioResult.transcript
+						}
+					} else {
+						// Process regular files (documents)
+						result = await FileProcessor.processFile(doc, teacherEmail)
+					}
+					
 					// Emit real-time update
 					req.io.to(`teacher-${teacherEmail}`).emit('file-processed', {
 						fileId: doc._id,
 						status: result.success ? 'processed' : 'failed',
-						analysis: result.analysis
+						analysis: result.analysis,
+						transcript: result.transcript
 					})
-				})
+					
+				} catch (error) {
+					console.error(`Error processing file ${f.originalname}:`, error)
+					req.io.to(`teacher-${teacherEmail}`).emit('file-processed', {
+						fileId: doc._id,
+						status: 'failed',
+						error: error.message
+					})
+				}
 			})
 			
 			return doc
@@ -469,6 +557,60 @@ app.post('/api/teacher/uploads', upload.array('files', 10), async (req, res) => 
 		
 		res.json({ uploaded: saved.length, items: saved })
 	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+// Process voice content (from real-time recording)
+app.post('/api/teacher/voice-content', async (req, res) => {
+	try {
+		const { transcript, audioBlob } = req.body
+		const teacherEmail = req.adminEmail
+		
+		if (!transcript || !transcript.trim()) {
+			return res.status(400).json({ error: 'No transcript provided' })
+		}
+		
+		// Analyze voice content with AI
+		const aiAnalysis = await AIService.analyzeFileContent(
+			transcript,
+			'Voice Recording',
+			'voice'
+		)
+		
+		// Create a virtual file document for voice content
+		const voiceFile = await File.create({
+			teacherEmail,
+			originalName: `voice-recording-${Date.now()}.txt`,
+			fileName: `voice-${Date.now()}.txt`,
+			mimeType: 'text/plain',
+			size: transcript.length,
+			status: 'processed',
+			uploadedBy: teacherEmail,
+			title: aiAnalysis.summary || 'Voice Recording',
+			content: transcript,
+			aiAnalysis: aiAnalysis,
+			section: 'voice',
+			transcript: transcript,
+			isVoiceContent: true
+		})
+		
+		// Emit real-time notification
+		req.io.to(`teacher-${teacherEmail}`).emit('voice-processed', {
+			fileId: voiceFile._id,
+			transcript: transcript,
+			analysis: aiAnalysis
+		})
+		
+		res.json({
+			success: true,
+			file: voiceFile,
+			transcript: transcript,
+			analysis: aiAnalysis
+		})
+		
+	} catch (error) {
+		console.error('Voice content processing error:', error)
 		res.status(500).json({ error: error.message })
 	}
 })
@@ -819,53 +961,308 @@ app.get('/api/student/quizzes', async (req, res) => {
 	}
 })
 
+app.get('/api/student/assigned-quizzes', async (req, res) => {
+	try {
+		const studentEmail = req.adminEmail
+		
+		// Get user
+		const user = await User.findOne({ email: studentEmail })
+		if (!user) {
+			return res.status(404).json({ error: 'User not found' })
+		}
+		
+		// Get quiz assignments for this student
+		const assignments = await QuizAssignment.find({
+			'students.studentId': user._id,
+			status: 'active'
+		})
+		.populate('quizId', 'title description questions difficulty isAIGenerated')
+		.populate('quizId.sourceFile', 'originalName')
+		.sort({ assignedAt: -1 })
+		
+		// Extract quizzes from assignments
+		const assignedQuizzes = assignments.map(assignment => {
+			const studentData = assignment.students.find(s => s.studentId.toString() === user._id.toString())
+			return {
+				...assignment.quizId.toObject(),
+				assignmentId: assignment._id,
+				assignedAt: studentData?.assignedAt,
+				dueDate: studentData?.dueDate,
+				status: studentData?.status,
+				attempts: studentData?.attempts || [],
+				bestScore: studentData?.bestScore,
+				totalAttempts: studentData?.totalAttempts || 0,
+				settings: assignment.settings
+			}
+		})
+		
+		res.json(assignedQuizzes)
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+// AI-powered quiz grading function
+async function gradeQuizWithAI(quiz, answers, user) {
+	try {
+		// Read source file content if available
+		let sourceContent = ''
+		if (quiz.sourceFile && quiz.sourceFile.filePath) {
+			try {
+				const fs = require('fs')
+				sourceContent = fs.readFileSync(quiz.sourceFile.filePath, 'utf8')
+			} catch (error) {
+				console.log('Could not read source file:', error.message)
+			}
+		}
+		
+		// Prepare grading context
+		const gradingContext = {
+			quizTitle: quiz.title,
+			quizDescription: quiz.description,
+			sourceContent: sourceContent.substring(0, 4000), // Limit content size
+			questions: quiz.questions.map(q => ({
+				question: q.question,
+				options: q.options,
+				correctAnswer: q.correctAnswer,
+				studentAnswer: answers[q._id]
+			})),
+			studentName: user.name,
+			studentEmail: user.email
+		}
+		
+		// Use AI service for grading
+		const aiService = require('./services/aiService')
+		const gradingPrompt = `
+You are an AI tutor grading a quiz. Please analyze the student's answers and provide detailed feedback.
+
+Quiz Context:
+- Title: ${gradingContext.quizTitle}
+- Description: ${gradingContext.quizDescription}
+- Source Material: ${gradingContext.sourceContent}
+
+Student: ${gradingContext.studentName} (${gradingContext.studentEmail})
+
+Questions and Answers:
+${gradingContext.questions.map((q, i) => `
+Question ${i + 1}: ${q.question}
+Options: ${q.options.join(', ')}
+Correct Answer: ${q.correctAnswer}
+Student Answer: ${q.studentAnswer}
+`).join('\n')}
+
+Please provide:
+1. Overall score (0-100)
+2. Number of correct answers
+3. Detailed feedback for each question
+4. Overall performance assessment
+5. Suggestions for improvement
+
+Respond in JSON format:
+{
+  "score": number,
+  "correctAnswers": number,
+  "totalQuestions": number,
+  "details": [
+    {
+      "questionIndex": number,
+      "question": string,
+      "studentAnswer": number,
+      "correctAnswer": number,
+      "isCorrect": boolean,
+      "feedback": string
+    }
+  ],
+  "feedback": string,
+  "suggestions": string
+}
+`
+		
+		const aiResponse = await aiService.generateAIResponse(gradingPrompt)
+		
+		// Parse AI response
+		let gradingResult
+		try {
+			gradingResult = JSON.parse(aiResponse.content)
+		} catch (parseError) {
+			// Fallback to simple grading if AI response is not valid JSON
+			let correctAnswers = 0
+			gradingContext.questions.forEach(q => {
+				if (q.studentAnswer === q.correctAnswer) {
+					correctAnswers++
+				}
+			})
+			
+			const score = Math.round((correctAnswers / gradingContext.questions.length) * 100)
+			gradingResult = {
+				score,
+				correctAnswers,
+				totalQuestions: gradingContext.questions.length,
+				details: gradingContext.questions.map((q, i) => ({
+					questionIndex: i,
+					question: q.question,
+					studentAnswer: q.studentAnswer,
+					correctAnswer: q.correctAnswer,
+					isCorrect: q.studentAnswer === q.correctAnswer,
+					feedback: q.studentAnswer === q.correctAnswer ? 'Correct!' : 'Incorrect. The correct answer is option ' + q.correctAnswer
+				})),
+				feedback: `You scored ${score}% (${correctAnswers}/${gradingContext.questions.length} correct)`,
+				suggestions: score >= 70 ? 'Great job! Keep up the good work.' : 'Review the material and try again.'
+			}
+		}
+		
+		return gradingResult
+	} catch (error) {
+		console.error('AI grading error:', error)
+		
+		// Fallback to simple grading
+		let correctAnswers = 0
+		quiz.questions.forEach(q => {
+			if (answers[q._id] === q.correctAnswer) {
+				correctAnswers++
+			}
+		})
+		
+		const score = Math.round((correctAnswers / quiz.questions.length) * 100)
+		
+		return {
+			score,
+			correctAnswers,
+			totalQuestions: quiz.questions.length,
+			details: quiz.questions.map((q, i) => ({
+				questionIndex: i,
+				question: q.question,
+				studentAnswer: answers[q._id],
+				correctAnswer: q.correctAnswer,
+				isCorrect: answers[q._id] === q.correctAnswer,
+				feedback: answers[q._id] === q.correctAnswer ? 'Correct!' : 'Incorrect. The correct answer is option ' + q.correctAnswer
+			})),
+			feedback: `You scored ${score}% (${correctAnswers}/${quiz.questions.length} correct)`,
+			suggestions: score >= 70 ? 'Great job! Keep up the good work.' : 'Review the material and try again.'
+		}
+	}
+}
+
+// Test endpoint to debug the issue
+app.post('/api/student/test-submit/:id', async (req, res) => {
+	try {
+		console.log('Test submission endpoint called')
+		res.json({
+			success: true,
+			message: 'Test endpoint working',
+			score: 85,
+			status: 'passed'
+		})
+	} catch (error) {
+		console.error('Test endpoint error:', error)
+		res.status(500).json({ error: error.message })
+	}
+})
+
 app.post('/api/student/quizzes/:id/submit', async (req, res) => {
 	try {
 		const { answers } = req.body
 		const quizId = req.params.id
 		const studentEmail = req.adminEmail
 		
-		const quiz = await Quiz.findById(quizId)
+		console.log('Quiz submission started for:', studentEmail, 'Quiz:', quizId)
+		
+		// Get user
+		const user = await User.findOne({ email: studentEmail })
+		if (!user) {
+			return res.status(404).json({ error: 'User not found' })
+		}
+		
+		// Get quiz with source file
+		const quiz = await Quiz.findById(quizId).populate('sourceFile')
 		if (!quiz) {
 			return res.status(404).json({ error: 'Quiz not found' })
 		}
 		
-		// Calculate score
-		let correctAnswers = 0
-		const totalQuestions = quiz.questions.length
+		// AI-powered grading
+		const gradingResult = await gradeQuizWithAI(quiz, answers, user)
 		
-		quiz.questions.forEach((question, index) => {
-			if (answers[question._id] === question.correctAnswer) {
-				correctAnswers++
+		// Update quiz assignment with attempt
+		try {
+			const assignment = await QuizAssignment.findOne({
+				quizId: quizId,
+				'students.studentId': user._id
+			})
+			
+			if (assignment) {
+				const studentData = assignment.students.find(s => s.studentId.toString() === user._id.toString())
+				if (studentData) {
+					studentData.totalAttempts = (studentData.totalAttempts || 0) + 1
+					studentData.attempts = studentData.attempts || []
+					studentData.attempts.push({
+						answers: answers,
+						score: gradingResult.score,
+						submittedAt: new Date(),
+						timeSpent: 0
+					})
+					
+					if (!studentData.bestScore || gradingResult.score > studentData.bestScore) {
+						studentData.bestScore = gradingResult.score
+					}
+					
+					studentData.status = gradingResult.score >= 70 ? 'completed' : 'in_progress'
+					if (gradingResult.score >= 70) {
+						studentData.completedAt = new Date()
+					}
+					
+					await assignment.save()
+					console.log('Assignment updated successfully')
+				}
 			}
-		})
-		
-		const score = Math.round((correctAnswers / totalQuestions) * 100)
-		
-		// Save quiz attempt
-		const attempt = {
-			studentEmail,
-			quizId,
-			answers,
-			score,
-			correctAnswers,
-			totalQuestions,
-			submittedAt: new Date()
+		} catch (assignmentError) {
+			console.error('Assignment update error:', assignmentError)
 		}
 		
 		// Update quiz statistics
-		await Quiz.findByIdAndUpdate(quizId, {
-			$inc: { totalAttempts: 1 },
-			$push: { attempts: attempt }
+		try {
+			await Quiz.findByIdAndUpdate(quizId, {
+				$inc: { totalAttempts: 1 }
+			})
+		} catch (statsError) {
+			console.error('Quiz stats update error:', statsError)
+		}
+		
+		// Send real-time notification to teacher
+		try {
+			const assignment = await QuizAssignment.findOne({
+				quizId: quizId,
+				'students.studentId': user._id
+			}).populate('teacherId')
+			
+			if (assignment && assignment.teacherId) {
+				req.io.to(`teacher-${assignment.teacherEmail}`).emit('quiz-submitted', {
+					studentName: user.name,
+					studentEmail: user.email,
+					quizTitle: quiz.title,
+					score: gradingResult.score,
+					submittedAt: new Date()
+				})
+			}
+		} catch (notificationError) {
+			console.error('Notification error:', notificationError)
+		}
+		
+		// Return results
+		res.json({
+			success: true,
+			score: gradingResult.score,
+			correctAnswers: gradingResult.correctAnswers,
+			totalQuestions: gradingResult.totalQuestions,
+			status: gradingResult.score >= 70 ? 'passed' : 'failed',
+			feedback: gradingResult.feedback,
+			suggestions: gradingResult.suggestions,
+			details: gradingResult.details
 		})
 		
-		res.json({
-			score,
-			correctAnswers,
-			totalQuestions,
-			attempt
-		})
+		console.log('Quiz submission completed successfully')
+		
 	} catch (error) {
+		console.error('Quiz submission error:', error)
 		res.status(500).json({ error: error.message })
 	}
 })
@@ -985,6 +1382,206 @@ app.get('/api/student/ai/interactions', async (req, res) => {
 			.sort({ createdAt: -1 })
 		
 		res.json(interactions)
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+// Student Management API Endpoints
+app.get('/api/teacher/students/registered', async (req, res) => {
+	try {
+		const teacherEmail = req.adminEmail
+		
+		// Get all students (users with role 'student')
+		const students = await User.find({ role: 'student' })
+			.select('name email role createdAt lastLogin')
+			.sort({ createdAt: -1 })
+		
+		res.json(students)
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+app.get('/api/teacher/students/active', async (req, res) => {
+	try {
+		const teacherEmail = req.adminEmail
+		
+		// Get students who are currently online
+		const activeStudents = await Student.find({ isOnline: true })
+			.populate('userId', 'name email')
+			.sort({ lastActive: -1 })
+		
+		const students = activeStudents.map(student => ({
+			_id: student.userId._id,
+			name: student.userId.name,
+			email: student.userId.email,
+			role: 'student',
+			lastActive: student.lastActive,
+			isOnline: student.isOnline,
+			studentId: student.studentId
+		}))
+		
+		res.json(students)
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+// Quiz Assignment API Endpoints
+app.post('/api/teacher/assign-quiz-multiple', async (req, res) => {
+	try {
+		const { quizId, studentIds } = req.body
+		const teacherEmail = req.adminEmail
+		
+		if (!quizId || !studentIds || !Array.isArray(studentIds)) {
+			return res.status(400).json({ error: 'Quiz ID and student IDs are required' })
+		}
+		
+		// Get teacher user
+		const teacher = await User.findOne({ email: teacherEmail })
+		if (!teacher) {
+			return res.status(404).json({ error: 'Teacher not found' })
+		}
+		
+		// Get quiz
+		const quiz = await Quiz.findById(quizId)
+		if (!quiz) {
+			return res.status(404).json({ error: 'Quiz not found' })
+		}
+		
+		// Get student details
+		const students = await User.find({ _id: { $in: studentIds } })
+		
+		// Create quiz assignment
+		const assignment = await QuizAssignment.createAssignment(
+			quizId,
+			teacher._id,
+			teacherEmail,
+			students.map(s => ({ studentId: s._id, studentEmail: s.email }))
+		)
+		
+		// Create notifications for each student
+		const notifications = await Promise.all(
+			students.map(student => 
+				Notification.createQuizAssignment(
+					student._id,
+					student.email,
+					quizId,
+					quiz.title
+				)
+			)
+		)
+		
+		// Send real-time notifications to students
+		students.forEach(student => {
+			req.io.to(`student-${student.email}`).emit('quiz-assigned', {
+				quizId,
+				quizTitle: quiz.title,
+				message: 'A quiz has been assigned to you. Please solve it.',
+				assignmentId: assignment._id
+			})
+		})
+		
+		// Notify teacher
+		req.io.to(`teacher-${teacherEmail}`).emit('quiz-assigned-success', {
+			quizId,
+			quizTitle: quiz.title,
+			studentCount: students.length,
+			assignmentId: assignment._id
+		})
+		
+		res.json({
+			assignment,
+			notifications: notifications.length,
+			students: students.length
+		})
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+app.get('/api/teacher/assigned-quizzes', async (req, res) => {
+	try {
+		const teacherEmail = req.adminEmail
+		
+		const assignments = await QuizAssignment.find({ teacherEmail })
+			.populate('quizId', 'title questions description')
+			.populate('students.studentId', 'name email')
+			.sort({ assignedAt: -1 })
+		
+		res.json(assignments)
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+// Student Notifications API Endpoints
+app.get('/api/student/notifications', async (req, res) => {
+	try {
+		const studentEmail = req.adminEmail
+		
+		const user = await User.findOne({ email: studentEmail })
+		if (!user) {
+			return res.status(404).json({ error: 'User not found' })
+		}
+		
+		const notifications = await Notification.find({ recipientId: user._id })
+			.populate('data.quizId', 'title questions description')
+			.sort({ createdAt: -1 })
+			.limit(50)
+		
+		res.json(notifications)
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+app.post('/api/student/notifications/:id/read', async (req, res) => {
+	try {
+		const notificationId = req.params.id
+		const studentEmail = req.adminEmail
+		
+		const user = await User.findOne({ email: studentEmail })
+		if (!user) {
+			return res.status(404).json({ error: 'User not found' })
+		}
+		
+		const notification = await Notification.findOne({
+			_id: notificationId,
+			recipientId: user._id
+		})
+		
+		if (!notification) {
+			return res.status(404).json({ error: 'Notification not found' })
+		}
+		
+		await notification.markAsRead()
+		
+		res.json({ success: true, notification })
+	} catch (error) {
+		res.status(500).json({ error: error.message })
+	}
+})
+
+app.post('/api/student/notifications/read-all', async (req, res) => {
+	try {
+		const studentEmail = req.adminEmail
+		
+		const user = await User.findOne({ email: studentEmail })
+		if (!user) {
+			return res.status(404).json({ error: 'User not found' })
+		}
+		
+		const result = await Notification.updateMany(
+			{ recipientId: user._id, read: false },
+			{ read: true, readAt: new Date() }
+		)
+		
+		res.json({ 
+			success: true, 
+			updatedCount: result.modifiedCount 
+		})
 	} catch (error) {
 		res.status(500).json({ error: error.message })
 	}

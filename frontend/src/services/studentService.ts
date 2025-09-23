@@ -17,6 +17,11 @@ export const getStudentQuizzes = async () => {
 	return data
 }
 
+export const getAssignedQuizzes = async () => {
+	const { data } = await api.get('/student/assigned-quizzes')
+	return data
+}
+
 export const submitQuizAnswer = async (quizId: string, answers: {[key: string]: number}) => {
 	const { data } = await api.post(`/student/quizzes/${quizId}/submit`, { answers })
 	return data
@@ -90,4 +95,39 @@ export const processVoiceQuestion = async (audioBlob: Blob, courseId?: string) =
 export const getTextToSpeech = async (text: string) => {
 	const { data } = await api.post('/student/ai/tts', { text })
 	return data
+}
+
+// Student Notifications
+export const getStudentNotifications = async () => {
+	const { data } = await api.get('/student/notifications')
+	return data
+}
+
+export const markNotificationAsRead = async (notificationId: string) => {
+	const { data } = await api.post(`/student/notifications/${notificationId}/read`)
+	return data
+}
+
+export const markAllNotificationsAsRead = async () => {
+	const { data } = await api.post('/student/notifications/read-all')
+	return data
+}
+
+// Real-time socket connection for students
+export const connectToStudentRoom = (studentEmail: string, onMessage: (event: string, data: any) => void) => {
+	const socket = new WebSocket(`ws://localhost:4000`)
+	
+	socket.onopen = () => {
+		socket.send(JSON.stringify({
+			type: 'join-student-room',
+			studentEmail
+		}))
+	}
+	
+	socket.onmessage = (event) => {
+		const data = JSON.parse(event.data)
+		onMessage(data.type, data.payload)
+	}
+	
+	return socket
 }

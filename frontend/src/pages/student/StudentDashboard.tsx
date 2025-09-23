@@ -1,7 +1,10 @@
 import { Box, Button, Paper, Stack, Tab, Tabs, Typography, Card, CardContent, Chip, List, ListItem, ListItemText, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Avatar, LinearProgress } from '@mui/material'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useDispatch } from 'react-redux'
+import { useNavigate } from 'react-router-dom'
 import { enqueueSnackbar } from 'notistack'
+import { logout } from '../../features/auth/authSlice'
 import { 
 	QuestionAnswer as QAIcon,
 	Quiz as QuizIcon,
@@ -11,17 +14,23 @@ import {
 	Mic as MicIcon,
 	Send as SendIcon,
 	PlayArrow as PlayIcon,
-	Pause as PauseIcon
+	Pause as PauseIcon,
+	Notifications as NotificationsIcon,
+	Assignment as AssignmentIcon
 } from '@mui/icons-material'
 import { 
 	getStudentCourses,
 	getStudentQuizzes,
+	getAssignedQuizzes,
 	submitQuizAnswer,
 	getStudentProgress,
 	saveStudentNote,
 	getStudentNotes,
 	askAIQuestion,
-	getStudentInteractions
+	getStudentInteractions,
+	getStudentNotifications,
+	markNotificationAsRead,
+	connectToStudentRoom
 } from '../../services/studentService'
 
 const StudentDashboard = () => {
@@ -37,8 +46,18 @@ const StudentDashboard = () => {
 	const [noteTitle, setNoteTitle] = useState('')
 	const [noteDialogOpen, setNoteDialogOpen] = useState(false)
 	const [isRecording, setIsRecording] = useState(false)
+	const [quizResults, setQuizResults] = useState<any>(null)
+	const [showResults, setShowResults] = useState(false)
 	
 	const qc = useQueryClient()
+	const dispatch = useDispatch()
+	const navigate = useNavigate()
+
+	const handleLogout = () => {
+		dispatch(logout())
+		navigate('/login')
+		enqueueSnackbar('Logged out successfully', { variant: 'success' })
+	}
 
 	// Queries
 	const { data: courses } = useQuery({ 
@@ -47,8 +66,8 @@ const StudentDashboard = () => {
 	})
 	
 	const { data: quizzes } = useQuery({ 
-		queryKey: ['student', 'quizzes'], 
-		queryFn: getStudentQuizzes
+		queryKey: ['student', 'assigned-quizzes'], 
+		queryFn: getAssignedQuizzes
 	})
 	
 	const { data: progress } = useQuery({ 
@@ -64,6 +83,11 @@ const StudentDashboard = () => {
 	const { data: interactions } = useQuery({ 
 		queryKey: ['student', 'interactions'], 
 		queryFn: getStudentInteractions
+	})
+	
+	const { data: notifications } = useQuery({ 
+		queryKey: ['student', 'notifications'], 
+		queryFn: getStudentNotifications
 	})
 
 	// Mutations
@@ -81,14 +105,14 @@ const StudentDashboard = () => {
 	const submitQuizMutation = useMutation({
 		mutationFn: ({ quizId, answers }: { quizId: string; answers: {[key: string]: number} }) => 
 			submitQuizAnswer(quizId, answers),
-		onSuccess: async () => {
-			enqueueSnackbar('Quiz submitted successfully', { variant: 'success' })
-			await qc.invalidateQueries({ queryKey: ['student', 'quizzes'] })
+		onSuccess: async (data) => {
+			enqueueSnackbar(`Quiz submitted! Score: ${data.score}%`, { variant: 'success' })
+			await qc.invalidateQueries({ queryKey: ['student', 'assigned-quizzes'] })
 			await qc.invalidateQueries({ queryKey: ['student', 'progress'] })
-			setQuizDialogOpen(false)
-			setSelectedQuiz(null)
-			setCurrentQuestionIndex(0)
-			setSelectedAnswers({})
+			
+			// Show quiz results
+			setQuizResults(data)
+			setShowResults(true)
 		},
 		onError: () => enqueueSnackbar('Failed to submit quiz', { variant: 'error' }),
 	})
@@ -163,6 +187,24 @@ const StudentDashboard = () => {
 			flexDirection: 'column',
 			alignItems: 'center'
 		}}>
+			{/* Logout Button - Top Right */}
+			<Box sx={{ position: 'fixed', top: 20, right: 20, zIndex: 1000 }}>
+				<Button 
+					onClick={handleLogout}
+					variant="contained"
+					color="error"
+					sx={{ 
+						borderRadius: '50px',
+						fontWeight: 'bold',
+						px: 3,
+						py: 1,
+						boxShadow: 3
+					}}
+				>
+					🚪 Logout
+				</Button>
+			</Box>
+			
 			<Typography variant="h5" mb={2} sx={{ textAlign: 'center', fontWeight: 'bold' }}>
 				Student Dashboard
 			</Typography>
@@ -171,6 +213,7 @@ const StudentDashboard = () => {
 				<Tab label="My Courses" />
 				<Tab label="AI Assistant" />
 				<Tab label="Quizzes" />
+				<Tab label="Notifications" />
 				<Tab label="My Notes" />
 				<Tab label="Progress" />
 			</Tabs>
@@ -320,16 +363,20 @@ const StudentDashboard = () => {
 				<Box sx={{ width: '100%' }}>
 					<Paper sx={{ p: 2, mb: 2 }}>
 						<Typography variant="h6" gutterBottom>
-							📝 Available Quizzes
+							📝 Assigned Quizzes
 						</Typography>
 						<Typography variant="body2" color="text.secondary">
-							Take AI-generated quizzes based on your course materials.
+							Quizzes assigned to you by your teachers. Complete them to track your progress.
 						</Typography>
 					</Paper>
 
 					<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: 2 }}>
 						{(quizzes || []).map((quiz: any) => (
-							<Card key={quiz._id} sx={{ height: '100%' }}>
+							<Card key={quiz._id} sx={{ 
+								height: '100%',
+								border: quiz.status === 'completed' ? '2px solid' : '1px solid',
+								borderColor: quiz.status === 'completed' ? 'success.main' : 'divider'
+							}}>
 								<CardContent>
 									<Stack spacing={2}>
 										<Box>
@@ -339,6 +386,29 @@ const StudentDashboard = () => {
 											<Typography variant="body2" color="text.secondary" gutterBottom>
 												{quiz.description}
 											</Typography>
+										</Box>
+										
+										{/* Assignment Info */}
+										<Box sx={{ bgcolor: 'primary.50', p: 2, borderRadius: 1 }}>
+											<Typography variant="subtitle2" gutterBottom>
+												📋 Assignment Details:
+											</Typography>
+											<Typography variant="body2" gutterBottom>
+												<strong>Assigned:</strong> {new Date(quiz.assignedAt).toLocaleDateString()}
+											</Typography>
+											{quiz.dueDate && (
+												<Typography variant="body2" gutterBottom>
+													<strong>Due:</strong> {new Date(quiz.dueDate).toLocaleDateString()}
+												</Typography>
+											)}
+											<Typography variant="body2">
+												<strong>Attempts:</strong> {quiz.totalAttempts}/{quiz.settings?.maxAttempts || 'Unlimited'}
+											</Typography>
+											{quiz.bestScore && (
+												<Typography variant="body2">
+													<strong>Best Score:</strong> {quiz.bestScore}%
+												</Typography>
+											)}
 										</Box>
 										
 										<Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
@@ -357,6 +427,12 @@ const StudentDashboard = () => {
 												size="small" 
 												color={quiz.isAIGenerated ? 'success' : 'default'}
 											/>
+											<Chip 
+												label={quiz.status || 'assigned'} 
+												size="small" 
+												color={quiz.status === 'completed' ? 'success' : 
+													   quiz.status === 'in_progress' ? 'warning' : 'default'}
+											/>
 										</Stack>
 
 										{quiz.sourceFile && (
@@ -369,6 +445,7 @@ const StudentDashboard = () => {
 											variant="contained" 
 											fullWidth
 											onClick={() => handleStartQuiz(quiz)}
+											disabled={quiz.status === 'completed' && quiz.settings?.maxAttempts && quiz.totalAttempts >= quiz.settings.maxAttempts}
 											sx={{ 
 												borderRadius: '50px',
 												fontWeight: 'bold',
@@ -376,7 +453,8 @@ const StudentDashboard = () => {
 												py: 1
 											}}
 										>
-											Start Quiz
+											{quiz.status === 'completed' ? 'Completed' : 
+											 quiz.status === 'in_progress' ? 'Continue Quiz' : 'Start Quiz'}
 										</Button>
 									</Stack>
 								</CardContent>
@@ -386,12 +464,137 @@ const StudentDashboard = () => {
 
 					{(!quizzes || quizzes.length === 0) && (
 						<Paper sx={{ p: 4, textAlign: 'center' }}>
-							<QuizIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+							<AssignmentIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
 							<Typography variant="h6" gutterBottom>
-								No Quizzes Available
+								No Assigned Quizzes
 							</Typography>
 							<Typography variant="body2" color="text.secondary" gutterBottom>
-								Quizzes will appear here when teachers generate them from course materials.
+								You haven't been assigned any quizzes yet. Your teachers will assign quizzes to you, and you'll receive notifications when they do.
+							</Typography>
+							<Typography variant="body2" color="text.secondary">
+								Check the Notifications tab for any quiz assignments.
+							</Typography>
+						</Paper>
+					)}
+				</Box>
+			)}
+
+			{/* Notifications Tab */}
+			{tab === 3 && (
+				<Box sx={{ width: '100%' }}>
+					<Paper sx={{ p: 2, mb: 2 }}>
+						<Typography variant="h6" gutterBottom>
+							🔔 Notifications
+						</Typography>
+						<Typography variant="body2" color="text.secondary">
+							Stay updated with quiz assignments and important announcements from your teachers.
+						</Typography>
+					</Paper>
+
+					<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: 2 }}>
+						{(notifications || []).map((notification: any) => (
+							<Card key={notification._id} sx={{ 
+								height: '100%',
+								border: notification.read ? '1px solid #e0e0e0' : '2px solid',
+								borderColor: notification.read ? '#e0e0e0' : 'primary.main',
+								bgcolor: notification.read ? 'background.paper' : 'primary.50'
+							}}>
+								<CardContent>
+									<Stack spacing={2}>
+										<Stack direction="row" alignItems="center" spacing={2}>
+											<Avatar sx={{ 
+												bgcolor: notification.type === 'quiz_assignment' ? 'success.main' : 'primary.main',
+												width: 40,
+												height: 40
+											}}>
+												{notification.type === 'quiz_assignment' ? <AssignmentIcon /> : <NotificationsIcon />}
+											</Avatar>
+											<Box sx={{ flex: 1 }}>
+												<Typography variant="h6" gutterBottom>
+													{notification.title}
+												</Typography>
+												<Typography variant="body2" color="text.secondary">
+													{new Date(notification.createdAt).toLocaleString()}
+												</Typography>
+											</Box>
+											{!notification.read && (
+												<Chip 
+													label="New" 
+													size="small" 
+													color="primary" 
+													variant="filled"
+												/>
+											)}
+										</Stack>
+										
+										<Typography variant="body2">
+											{notification.message}
+										</Typography>
+										
+										{notification.type === 'quiz_assignment' && notification.quiz && (
+											<Box sx={{ bgcolor: 'grey.50', p: 2, borderRadius: 1 }}>
+												<Typography variant="subtitle2" gutterBottom>
+													📝 Quiz Details:
+												</Typography>
+												<Typography variant="body2" gutterBottom>
+													<strong>Title:</strong> {notification.quiz.title}
+												</Typography>
+												<Typography variant="body2" gutterBottom>
+													<strong>Questions:</strong> {notification.quiz.questions?.length || 0}
+												</Typography>
+												<Typography variant="body2">
+													<strong>Description:</strong> {notification.quiz.description}
+												</Typography>
+											</Box>
+										)}
+										
+										<Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+											<Chip 
+												label={notification.type === 'quiz_assignment' ? 'Quiz Assignment' : 'General'} 
+												size="small" 
+												color={notification.type === 'quiz_assignment' ? 'success' : 'primary'} 
+											/>
+											<Chip 
+												label={notification.read ? 'Read' : 'Unread'} 
+												size="small" 
+												variant="outlined"
+												color={notification.read ? 'default' : 'primary'}
+											/>
+										</Stack>
+										
+										{!notification.read && (
+											<Button 
+												variant="outlined" 
+												size="small"
+												onClick={() => {
+													markNotificationAsRead(notification._id)
+													enqueueSnackbar('Notification marked as read', { variant: 'success' })
+												}}
+												sx={{ 
+													borderRadius: '50px',
+													fontWeight: 'bold',
+													px: 2,
+													py: 0.5,
+													alignSelf: 'flex-start'
+												}}
+											>
+												Mark as Read
+											</Button>
+										)}
+									</Stack>
+								</CardContent>
+							</Card>
+						))}
+					</Box>
+
+					{(!notifications || notifications.length === 0) && (
+						<Paper sx={{ p: 4, textAlign: 'center' }}>
+							<NotificationsIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+							<Typography variant="h6" gutterBottom>
+								No Notifications
+							</Typography>
+							<Typography variant="body2" color="text.secondary" gutterBottom>
+								You'll receive notifications here when teachers assign quizzes or send important announcements.
 							</Typography>
 						</Paper>
 					)}
@@ -399,7 +602,7 @@ const StudentDashboard = () => {
 			)}
 
 			{/* My Notes Tab */}
-			{tab === 3 && (
+			{tab === 4 && (
 				<Box sx={{ width: '100%' }}>
 					<Paper sx={{ p: 2, mb: 2 }}>
 						<Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -449,7 +652,7 @@ const StudentDashboard = () => {
 			)}
 
 			{/* Progress Tab */}
-			{tab === 4 && (
+			{tab === 5 && (
 				<Box sx={{ width: '100%' }}>
 					<Paper sx={{ p: 2, mb: 2 }}>
 						<Typography variant="h6" gutterBottom>
@@ -610,6 +813,118 @@ const StudentDashboard = () => {
 						}}
 					>
 						{submitQuizMutation.isPending ? 'Submitting...' : 'Submit Quiz'}
+					</Button>
+				</DialogActions>
+			</Dialog>
+
+			{/* Quiz Results Dialog */}
+			<Dialog open={showResults} onClose={() => setShowResults(false)} maxWidth="md" fullWidth>
+				<DialogTitle>
+					<Typography variant="h5" gutterBottom>
+						🎯 Quiz Results
+					</Typography>
+					<Typography variant="subtitle2" color="text.secondary">
+						{selectedQuiz?.title || 'Quiz'}
+					</Typography>
+				</DialogTitle>
+				<DialogContent>
+					{quizResults && (
+						<Stack spacing={3}>
+							{/* Score Summary */}
+							<Paper sx={{ p: 3, textAlign: 'center', bgcolor: quizResults.status === 'passed' ? 'success.50' : 'error.50' }}>
+								<Typography variant="h2" color={quizResults.status === 'passed' ? 'success.main' : 'error.main'} gutterBottom>
+									{quizResults.score}%
+								</Typography>
+								<Typography variant="h6" gutterBottom>
+									{quizResults.status === 'passed' ? '🎉 Congratulations! You Passed!' : '📚 Keep Learning!'}
+								</Typography>
+								<Typography variant="body1">
+									{quizResults.correctAnswers} out of {quizResults.totalQuestions} questions correct
+								</Typography>
+							</Paper>
+
+							{/* Overall Feedback */}
+							<Paper sx={{ p: 2 }}>
+								<Typography variant="h6" gutterBottom>
+									📝 Overall Feedback
+								</Typography>
+								<Typography variant="body1">
+									{quizResults.feedback}
+								</Typography>
+							</Paper>
+
+							{/* Suggestions */}
+							{quizResults.suggestions && (
+								<Paper sx={{ p: 2 }}>
+									<Typography variant="h6" gutterBottom>
+										💡 Suggestions
+									</Typography>
+									<Typography variant="body1">
+										{quizResults.suggestions}
+									</Typography>
+								</Paper>
+							)}
+
+							{/* Question-by-Question Results */}
+							<Paper sx={{ p: 2 }}>
+								<Typography variant="h6" gutterBottom>
+									📋 Question Details
+								</Typography>
+								<Stack spacing={2}>
+									{quizResults.details?.map((detail: any, index: number) => (
+										<Box key={index} sx={{ 
+											p: 2, 
+											border: '1px solid', 
+											borderColor: detail.isCorrect ? 'success.main' : 'error.main',
+											borderRadius: 1,
+											bgcolor: detail.isCorrect ? 'success.50' : 'error.50'
+										}}>
+											<Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 1 }}>
+												<Typography variant="subtitle1" sx={{ flex: 1 }}>
+													Question {index + 1}
+												</Typography>
+												<Chip 
+													label={detail.isCorrect ? 'Correct' : 'Incorrect'} 
+													color={detail.isCorrect ? 'success' : 'error'}
+													size="small"
+												/>
+											</Stack>
+											<Typography variant="body2" gutterBottom>
+												{detail.question}
+											</Typography>
+											<Typography variant="body2" color="text.secondary" gutterBottom>
+												Your Answer: Option {String.fromCharCode(65 + detail.studentAnswer)} | 
+												Correct Answer: Option {String.fromCharCode(65 + detail.correctAnswer)}
+											</Typography>
+											<Typography variant="body2">
+												<strong>Feedback:</strong> {detail.feedback}
+											</Typography>
+										</Box>
+									))}
+								</Stack>
+							</Paper>
+						</Stack>
+					)}
+				</DialogContent>
+				<DialogActions>
+					<Button 
+						onClick={() => {
+							setShowResults(false)
+							setQuizDialogOpen(false)
+							setSelectedQuiz(null)
+							setCurrentQuestionIndex(0)
+							setSelectedAnswers({})
+							setQuizResults(null)
+						}}
+						variant="contained"
+						sx={{ 
+							borderRadius: '50px',
+							fontWeight: 'bold',
+							px: 3,
+							py: 1
+						}}
+					>
+						Close
 					</Button>
 				</DialogActions>
 			</Dialog>

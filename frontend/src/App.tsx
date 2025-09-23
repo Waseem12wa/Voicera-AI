@@ -32,7 +32,7 @@ const StudentDashboard = lazy(() => import('./pages/student/StudentDashboard'))
 
 const HomeRouter = () => {
   const auth = useSelector((s: RootState) => s.auth)
-  if (!auth.isAuthenticated) return <Navigate to="/login" replace />
+  if (!auth.isAuthenticated) return <Navigate to="/register" replace />
   const role = auth.user?.role
   if (role === 'teacher') return <Navigate to="/teacher" replace />
   if (role === 'student') return <Navigate to="/student" replace />

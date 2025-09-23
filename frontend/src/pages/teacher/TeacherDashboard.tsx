@@ -1,12 +1,23 @@
 import { Box, Button, Paper, Stack, Tab, Tabs, Typography, List, ListItem, ListItemText, Divider } from '@mui/material'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useDispatch } from 'react-redux'
+import { useNavigate } from 'react-router-dom'
 import { approveAIResponse, createAIResponse, getTeacherAnalytics, listAIResponses, listMaterials, uploadMaterials } from '../../services/teacherService'
 import { enqueueSnackbar } from 'notistack'
+import { logout } from '../../features/auth/authSlice'
 
 const TeacherDashboard = () => {
 	const [tab, setTab] = useState(0)
 	const qc = useQueryClient()
+	const dispatch = useDispatch()
+	const navigate = useNavigate()
+
+	const handleLogout = () => {
+		dispatch(logout())
+		navigate('/login')
+		enqueueSnackbar('Logged out successfully', { variant: 'success' })
+	}
 
 	const { data: materials } = useQuery({ queryKey: ['teacher','materials'], queryFn: listMaterials })
 	const { data: responses } = useQuery({ queryKey: ['teacher','responses'], queryFn: listAIResponses })
@@ -31,6 +42,24 @@ const TeacherDashboard = () => {
 
 	return (
 		<Box sx={{ my: 2 }}>
+			{/* Logout Button - Top Right */}
+			<Box sx={{ position: 'fixed', top: 20, right: 20, zIndex: 1000 }}>
+				<Button 
+					onClick={handleLogout}
+					variant="contained"
+					color="error"
+					sx={{ 
+						borderRadius: '50px',
+						fontWeight: 'bold',
+						px: 3,
+						py: 1,
+						boxShadow: 3
+					}}
+				>
+					🚪 Logout
+				</Button>
+			</Box>
+			
 			<Typography variant="h5" mb={2} sx={{ textAlign: 'center', fontWeight: 'bold' }}>Teacher Dashboard</Typography>
 			<Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ mb: 2 }}>
 				<Tab label="Uploads" />

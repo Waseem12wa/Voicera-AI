@@ -8,7 +8,7 @@ const fileSchema = new mongoose.Schema({
 	size: { type: Number, required: true },
 	section: { 
 		type: String, 
-		enum: ['lectures', 'assignments', 'notes', 'resources', 'quizzes'],
+		enum: ['lectures', 'assignments', 'notes', 'resources', 'quizzes', 'voice', 'audio'],
 		default: 'lectures'
 	},
 	status: { 
@@ -36,6 +36,15 @@ const fileSchema = new mongoose.Schema({
 	// Student Interaction
 	downloads: { type: Number, default: 0 },
 	views: { type: Number, default: 0 },
+	// Voice/Audio specific fields
+	transcript: String,
+	isVoiceContent: { type: Boolean, default: false },
+	audioDuration: Number, // in seconds
+	recordingQuality: { type: String, enum: ['low', 'medium', 'high'] },
+	
+	// File content (for voice/audio files)
+	content: String,
+	
 	// Metadata
 	uploadedBy: String,
 	lastModified: Date

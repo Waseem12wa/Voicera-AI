@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Box, Button, Paper, Stack, TextField, Typography, MenuItem, CircularProgress } from '@mui/material'
 import { useDispatch } from 'react-redux'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { enqueueSnackbar } from 'notistack'
 import { registerAdmin, checkEmailExists } from '../../services/userService'
 import { loginSuccess } from '../../features/auth/authSlice'
@@ -128,6 +128,21 @@ const RegisterPage = () => {
 						}}
 					>
 						{isSubmitting ? 'Registering...' : 'Register'}
+					</Button>
+					<Button 
+						component={Link}
+						to="/login"
+						variant="outlined"
+						fullWidth
+						sx={{ 
+							borderRadius: '50px',
+							fontWeight: 'bold',
+							px: 3,
+							py: 1,
+							mt: 1
+						}}
+					>
+						Already have an account? Login
 					</Button>
 				</Stack>
 			</Paper>

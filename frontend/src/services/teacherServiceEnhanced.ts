@@ -68,6 +68,68 @@ export const getEnhancedAnalytics = async () => {
 	return response.data
 }
 
+// Student Management
+export const getRegisteredStudents = async () => {
+	const response = await api.get('/teacher/students/registered')
+	return response.data
+}
+
+export const getActiveStudents = async () => {
+	const response = await api.get('/teacher/students/active')
+	return response.data
+}
+
+// Quiz Assignment
+export const assignQuizToStudent = async (quizId: string, studentId: string) => {
+	const response = await api.post('/teacher/assign-quiz', {
+		quizId,
+		studentId
+	})
+	return response.data
+}
+
+export const assignQuizToMultipleStudents = async (quizId: string, studentIds: string[]) => {
+	const response = await api.post('/teacher/assign-quiz-multiple', {
+		quizId,
+		studentIds
+	})
+	return response.data
+}
+
+export const getAssignedQuizzes = async () => {
+	const response = await api.get('/teacher/assigned-quizzes')
+	return response.data
+}
+
+// Voice Content Processing
+export const processVoiceContent = async (transcript: string, audioBlob?: Blob) => {
+	const formData = new FormData()
+	formData.append('transcript', transcript)
+	
+	if (audioBlob) {
+		formData.append('audioBlob', audioBlob, 'voice-recording.wav')
+	}
+	
+	const response = await api.post('/teacher/voice-content', formData, {
+		headers: {
+			'Content-Type': 'multipart/form-data'
+		}
+	})
+	return response.data
+}
+
+export const uploadAudioFile = async (audioFile: File) => {
+	const formData = new FormData()
+	formData.append('files', audioFile)
+	
+	const response = await api.post('/teacher/uploads', formData, {
+		headers: {
+			'Content-Type': 'multipart/form-data'
+		}
+	})
+	return response.data
+}
+
 // Real-time socket connection
 export const connectToTeacherRoom = (teacherEmail: string, onMessage: (event: string, data: any) => void) => {
 	const socket = new WebSocket(`ws://localhost:4000`)

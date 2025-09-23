@@ -166,13 +166,15 @@ const EnhancedAppBar: React.FC = () => {
       component={Link as any}
       to={item.path}
       color="inherit"
+      size="small"
       sx={{
         textTransform: 'none',
-        fontWeight: 600,
-        borderRadius: 2,
-        px: 2,
-        py: 1,
-        minHeight: 40,
+        fontWeight: 500,
+        borderRadius: 1,
+        px: 1.5,
+        py: 0.5,
+        minHeight: 32,
+        fontSize: '0.875rem',
         '&:hover': {
           backgroundColor: 'rgba(255, 255, 255, 0.1)',
         },
@@ -287,8 +289,9 @@ const EnhancedAppBar: React.FC = () => {
       >
         <Toolbar
           sx={{
-            minHeight: { xs: 56, sm: 64 },
-            px: { xs: 1, sm: 2 },
+            minHeight: { xs: 48, sm: 56 },
+            px: { xs: 1, sm: 1.5 },
+            py: 0.5,
           }}
         >
           {/* Mobile menu button */}
@@ -298,11 +301,11 @@ const EnhancedAppBar: React.FC = () => {
             onClick={handleDrawerToggle}
             sx={{
               display: { xs: 'block', md: 'none' },
-              mr: 1,
+              mr: 0.5,
             }}
-            size="large"
+            size="small"
           >
-            <MenuIcon />
+            <MenuIcon fontSize="small" />
           </IconButton>
 
           {/* Logo/Brand */}
@@ -311,8 +314,8 @@ const EnhancedAppBar: React.FC = () => {
             component="div"
             sx={{
               flexGrow: { xs: 1, md: 0 },
-              fontWeight: 700,
-              fontSize: { xs: '1.1rem', sm: '1.25rem' },
+              fontWeight: 600,
+              fontSize: { xs: '1rem', sm: '1.1rem' },
             }}
           >
             Voicera Admin
@@ -324,8 +327,8 @@ const EnhancedAppBar: React.FC = () => {
               display: { xs: 'none', md: 'flex' },
               flexGrow: 1,
               justifyContent: 'center',
-              gap: 1,
-              mx: 4,
+              gap: 0.5,
+              mx: 2,
             }}
             role="navigation"
             aria-label={ARIA_LABELS.MAIN_NAVIGATION}
@@ -350,10 +353,10 @@ const EnhancedAppBar: React.FC = () => {
               color="inherit"
               onClick={handleNotificationsOpen}
               aria-label="View notifications"
-              size="large"
+              size="small"
             >
               <Badge badgeContent={0} color="error">
-                <NotificationsIcon />
+                <NotificationsIcon fontSize="small" />
               </Badge>
             </IconButton>
 
@@ -362,17 +365,17 @@ const EnhancedAppBar: React.FC = () => {
               ref={userMenuRef}
               onClick={handleUserMenuOpen}
               aria-label="Open user menu"
-              size="large"
-              sx={{ ml: 1 }}
+              size="small"
+              sx={{ ml: 0.5 }}
             >
               <Avatar
                 sx={{
-                  width: 32,
-                  height: 32,
+                  width: 28,
+                  height: 28,
                   bgcolor: 'secondary.main',
                 }}
               >
-                <PersonIcon />
+                <PersonIcon fontSize="small" />
               </Avatar>
             </IconButton>
           </Box>
