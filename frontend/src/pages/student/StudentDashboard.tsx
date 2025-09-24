@@ -104,7 +104,7 @@ const StudentDashboard = () => {
 
 	const submitQuizMutation = useMutation({
 		mutationFn: ({ quizId, answers }: { quizId: string; answers: {[key: string]: number} }) => 
-			submitQuizAnswer(quizId, answers),
+			submitQuizAnswer(quizId, Object.entries(answers).map(([questionId, answerIndex]) => ({ questionId, answerIndex }))),
 		onSuccess: async (data) => {
 			enqueueSnackbar(`Quiz submitted! Score: ${data.score}%`, { variant: 'success' })
 			await qc.invalidateQueries({ queryKey: ['student', 'assigned-quizzes'] })
@@ -211,6 +211,7 @@ const StudentDashboard = () => {
 			
 			<Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ mb: 2, width: '100%', justifyContent: 'center' }}>
 				<Tab label="My Courses" />
+				<Tab label="Learning Materials" />
 				<Tab label="AI Assistant" />
 				<Tab label="Quizzes" />
 				<Tab label="Notifications" />
@@ -308,8 +309,125 @@ const StudentDashboard = () => {
 				</Box>
 			)}
 
-			{/* AI Assistant Tab */}
+			{/* Learning Materials Tab */}
 			{tab === 1 && (
+				<Box sx={{ width: '100%' }}>
+					<Paper sx={{ p: 2, mb: 2 }}>
+						<Typography variant="h6" gutterBottom>
+							📚 Learning Materials
+						</Typography>
+						<Typography variant="body2" color="text.secondary">
+							Access all documents, audio files, and educational content uploaded by your teachers.
+						</Typography>
+					</Paper>
+
+					<Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+						<Button
+							variant="contained"
+							size="large"
+							onClick={() => navigate('/student/files')}
+							sx={{
+								borderRadius: '50px',
+								fontWeight: 'bold',
+								px: 4,
+								py: 2,
+							background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+							'&:hover': {
+								background: 'linear-gradient(135deg, #1565c0 0%, #0d47a1 100%)'
+							}
+							}}
+						>
+							📖 Browse All Learning Materials
+						</Button>
+					</Box>
+
+					<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 2 }}>
+						<Card sx={{ background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)', color: 'white' }}>
+							<CardContent>
+								<Stack spacing={2}>
+									<Typography variant="h6">
+										📄 Documents & PDFs
+									</Typography>
+									<Typography variant="body2" sx={{ opacity: 0.9 }}>
+										Access lecture notes, assignments, and study materials uploaded by teachers.
+									</Typography>
+									<Button
+										variant="outlined"
+										sx={{ 
+											borderColor: 'rgba(255,255,255,0.5)',
+											color: 'white',
+											'&:hover': {
+												borderColor: 'white',
+												backgroundColor: 'rgba(255,255,255,0.1)'
+											}
+										}}
+										onClick={() => navigate('/student/files?section=lectures')}
+									>
+										View Documents
+									</Button>
+								</Stack>
+							</CardContent>
+						</Card>
+
+						<Card sx={{ background: 'linear-gradient(135deg, #2196f3 0%, #1976d2 100%)', color: 'white' }}>
+							<CardContent>
+								<Stack spacing={2}>
+									<Typography variant="h6">
+										🎵 Audio & Voice Content
+									</Typography>
+									<Typography variant="body2" sx={{ opacity: 0.9 }}>
+										Listen to recorded lectures, voice notes, and audio explanations.
+									</Typography>
+									<Button
+										variant="outlined"
+										sx={{ 
+											borderColor: 'rgba(255,255,255,0.5)',
+											color: 'white',
+											'&:hover': {
+												borderColor: 'white',
+												backgroundColor: 'rgba(255,255,255,0.1)'
+											}
+										}}
+										onClick={() => navigate('/student/files?section=audio')}
+									>
+										View Audio Files
+									</Button>
+								</Stack>
+							</CardContent>
+						</Card>
+
+						<Card sx={{ background: 'linear-gradient(135deg, #42a5f5 0%, #1976d2 100%)', color: 'white' }}>
+							<CardContent>
+								<Stack spacing={2}>
+									<Typography variant="h6">
+										📝 Assignments & Quizzes
+									</Typography>
+									<Typography variant="body2" sx={{ opacity: 0.9 }}>
+										Find assignments, practice quizzes, and assessment materials.
+									</Typography>
+									<Button
+										variant="outlined"
+										sx={{ 
+											borderColor: 'rgba(255,255,255,0.5)',
+											color: 'white',
+											'&:hover': {
+												borderColor: 'white',
+												backgroundColor: 'rgba(255,255,255,0.1)'
+											}
+										}}
+										onClick={() => navigate('/student/files?section=assignments')}
+									>
+										View Assignments
+									</Button>
+								</Stack>
+							</CardContent>
+						</Card>
+					</Box>
+				</Box>
+			)}
+
+			{/* AI Assistant Tab */}
+			{tab === 2 && (
 				<Box sx={{ width: '100%' }}>
 					<Paper sx={{ p: 2, mb: 2 }}>
 						<Typography variant="h6" gutterBottom>
@@ -359,7 +477,7 @@ const StudentDashboard = () => {
 			)}
 
 			{/* Quizzes Tab */}
-			{tab === 2 && (
+			{tab === 3 && (
 				<Box sx={{ width: '100%' }}>
 					<Paper sx={{ p: 2, mb: 2 }}>
 						<Typography variant="h6" gutterBottom>
@@ -480,7 +598,7 @@ const StudentDashboard = () => {
 			)}
 
 			{/* Notifications Tab */}
-			{tab === 3 && (
+			{tab === 4 && (
 				<Box sx={{ width: '100%' }}>
 					<Paper sx={{ p: 2, mb: 2 }}>
 						<Typography variant="h6" gutterBottom>
@@ -602,7 +720,7 @@ const StudentDashboard = () => {
 			)}
 
 			{/* My Notes Tab */}
-			{tab === 4 && (
+			{tab === 5 && (
 				<Box sx={{ width: '100%' }}>
 					<Paper sx={{ p: 2, mb: 2 }}>
 						<Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -652,7 +770,7 @@ const StudentDashboard = () => {
 			)}
 
 			{/* Progress Tab */}
-			{tab === 5 && (
+			{tab === 6 && (
 				<Box sx={{ width: '100%' }}>
 					<Paper sx={{ p: 2, mb: 2 }}>
 						<Typography variant="h6" gutterBottom>

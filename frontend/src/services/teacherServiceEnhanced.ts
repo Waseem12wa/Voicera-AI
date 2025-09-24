@@ -13,7 +13,7 @@ export const uploadFiles = async (files: File[]) => {
 
 export const getFilesBySection = async (section?: string) => {
 	const params = section ? { section } : {}
-	const response = await api.get('/teacher/files', { params })
+	const response = await api.get('/teacher/uploads', { params })
 	return response.data
 }
 
@@ -122,6 +122,20 @@ export const uploadAudioFile = async (audioFile: File) => {
 		headers: {
 			'Content-Type': 'multipart/form-data'
 		}
+	})
+	return response.data
+}
+
+// File Details and Additional Information
+export const getFileDetails = async (fileId: string) => {
+	const response = await api.get(`/teacher/files/${fileId}`)
+	return response.data
+}
+
+export const generateAdditionalInfo = async (fileId: string, fileDetails: any) => {
+	const response = await api.post('/teacher/generate-additional-info', {
+		fileId,
+		fileDetails
 	})
 	return response.data
 }

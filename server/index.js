@@ -677,10 +677,78 @@ app.delete('/api/teacher/files/:id', async (req, res) => {
 			fileName: file.originalName
 		})
 		
-		res.json({ success: true, message: 'File deleted successfully' })
+	res.json({ success: true, message: 'File deleted successfully' })
+} catch (error) {
+	console.error('Delete file error:', error)
+	res.status(500).json({ error: error.message })
+}
+})
+
+// Get File Details
+app.get('/api/teacher/files/:id', async (req, res) => {
+	try {
+		const { id } = req.params
+		const teacherEmail = req.adminEmail
+		
+		const file = await File.findById(id)
+		if (!file) {
+			return res.status(404).json({ error: 'File not found' })
+		}
+		
+		// Check if teacher owns this file
+		if (file.teacherEmail !== teacherEmail) {
+			return res.status(403).json({ error: 'Unauthorized to access this file' })
+		}
+		
+		res.json(file)
 	} catch (error) {
-		console.error('Delete file error:', error)
+		console.error('Get file details error:', error)
 		res.status(500).json({ error: error.message })
+	}
+})
+
+// Generate Additional Information
+app.post('/api/teacher/generate-additional-info', async (req, res) => {
+	try {
+		const { fileId, fileDetails } = req.body
+		const teacherEmail = req.adminEmail
+		
+		if (!fileId) {
+			return res.status(400).json({ error: 'File ID is required' })
+		}
+		
+		const file = await File.findById(fileId)
+		if (!file) {
+			return res.status(404).json({ error: 'File not found' })
+		}
+		
+		if (file.teacherEmail !== teacherEmail) {
+			return res.status(403).json({ error: 'Unauthorized access to file' })
+		}
+		
+		// Extract content for additional information generation
+		let content = file.aiAnalysis?.rawContent || file.aiAnalysis?.summary || file.description || file.content || file.originalName
+		
+		// If content is still too short, generate enhanced content
+		if (!content || content.length < 50) {
+			const enhancedAnalysis = await AIService.generateEnhancedFallbackAnalysis(
+				file.originalName, 
+				file.mimeType, 
+				content || ''
+			)
+			content = enhancedAnalysis.summary + ' ' + enhancedAnalysis.tags.join(' ')
+		}
+		
+		// Generate additional information using AI
+		const additionalInfo = await AIService.generateAdditionalInformation(content, file.originalName, file.mimeType)
+		
+		res.json({ additionalInfo })
+	} catch (error) {
+		console.error('Generate additional info error:', error)
+		res.status(500).json({ 
+			error: 'Failed to generate additional information',
+			details: error.message
+		})
 	}
 })
 
@@ -842,11 +910,17 @@ app.post('/api/teacher/generate-quiz', async (req, res) => {
 		console.log('File found:', file.originalName, 'Content available:', !!file.aiAnalysis?.summary)
 		
 		// Extract content from file analysis or use file content directly
-		let content = file.aiAnalysis?.summary || file.description || file.originalName
+		let content = file.aiAnalysis?.rawContent || file.aiAnalysis?.summary || file.description || file.content || file.originalName
 		
-		// If we have the actual file content, use it for better quiz generation
-		if (file.aiAnalysis?.rawContent) {
-			content = file.aiAnalysis.rawContent
+		// If content is still too short, generate enhanced content
+		if (!content || content.length < 50) {
+			console.log('Content too short, generating enhanced content for quiz')
+			const enhancedAnalysis = await AIService.generateEnhancedFallbackAnalysis(
+				file.originalName, 
+				file.mimeType, 
+				content || ''
+			)
+			content = enhancedAnalysis.summary + ' ' + enhancedAnalysis.tags.join(' ')
 		}
 		
 		console.log('Content length:', content?.length || 0)
@@ -997,10 +1071,106 @@ app.get('/api/teacher/quizzes/:id', async (req, res) => {
 	}
 })
 
-// Legacy endpoints for backward compatibility
+// Enhanced file retrieval with automatic AI analysis
 app.get('/api/teacher/uploads', async (req, res) => {
-	const items = await File.find({ teacherEmail: req.adminEmail }).sort({ createdAt: -1 })
-	res.json(items)
+	try {
+		const teacherEmail = req.adminEmail
+		const { section } = req.query
+		
+		// Build filter
+		const filter = { teacherEmail }
+		if (section && section !== 'all') {
+			filter.section = section
+		}
+		
+		// Get files
+		let files = await File.find(filter).sort({ createdAt: -1 })
+		
+		// Ensure all files have AI analysis - process any that don't
+		const filesNeedingAnalysis = files.filter(file => 
+			!file.aiAnalysis || 
+			!file.aiAnalysis.summary || 
+			file.status === 'uploaded' || 
+			file.status === 'processing'
+		)
+		
+		// Process files that need AI analysis
+		if (filesNeedingAnalysis.length > 0) {
+			console.log(`Processing ${filesNeedingAnalysis.length} files that need AI analysis`)
+			
+			await Promise.all(filesNeedingAnalysis.map(async (file) => {
+				try {
+					// Update status to processing
+					await File.findByIdAndUpdate(file._id, { status: 'processing' })
+					
+					let result
+					
+					// Check if it's an audio file
+					if (file.mimeType.startsWith('audio/')) {
+						// For audio files, use existing content or generate fallback
+						const content = file.content || file.transcript || `Audio file: ${file.originalName}`
+						const analysis = await AIService.analyzeFileContent(content, file.originalName, file.mimeType)
+						
+						await File.findByIdAndUpdate(file._id, {
+							aiAnalysis: {
+								...analysis,
+								rawContent: content,
+								analyzedAt: new Date()
+							},
+							status: 'processed'
+						})
+						
+						result = { success: true, analysis }
+					} else {
+						// Process regular files (documents)
+						result = await FileProcessor.processFile(file, teacherEmail)
+					}
+					
+					if (result.success) {
+						console.log(`Successfully processed file: ${file.originalName}`)
+					}
+				} catch (error) {
+					console.error(`Error processing file ${file.originalName}:`, error)
+					// Set fallback analysis for failed files
+					const fallbackAnalysis = await AIService.generateEnhancedFallbackAnalysis(
+						file.originalName, 
+						file.mimeType, 
+						file.content || ''
+					)
+					
+					await File.findByIdAndUpdate(file._id, {
+						aiAnalysis: {
+							...fallbackAnalysis,
+							rawContent: file.content || `File: ${file.originalName}`,
+							analyzedAt: new Date()
+						},
+						status: 'processed'
+					})
+				}
+			}))
+			
+			// Re-fetch files to get updated data
+			files = await File.find(filter).sort({ createdAt: -1 })
+		}
+		
+		// Group files by section for the frontend
+		const filesBySection = files.reduce((acc, file) => {
+			const section = file.section || 'lectures'
+			if (!acc[section]) acc[section] = []
+			acc[section].push(file)
+			return acc
+		}, {})
+		
+		res.json({
+			files,
+			sections: filesBySection,
+			total: files.length,
+			processed: files.filter(f => f.status === 'processed').length
+		})
+	} catch (error) {
+		console.error('Error retrieving files:', error)
+		res.status(500).json({ error: error.message })
+	}
 })
 
 app.get('/api/teacher/responses', async (req, res) => {
@@ -3394,6 +3564,189 @@ app.get('/api/admin/logs/stats', async (req, res) => {
 		]
 	})
 })
+
+// Student Routes - File Access
+app.get('/api/student/files', async (req, res) => {
+	try {
+		const { section } = req.query
+		
+		// Build filter - students can see all files from all teachers
+		const filter = { status: 'processed' } // Only show processed files
+		if (section && section !== 'all') {
+			filter.section = section
+		}
+		
+		// Get files
+		let files = await File.find(filter).sort({ createdAt: -1 })
+		
+		// Group files by section for the frontend
+		const filesBySection = files.reduce((acc, file) => {
+			const section = file.section || 'lectures'
+			if (!acc[section]) acc[section] = []
+			acc[section].push(file)
+			return acc
+		}, {})
+		
+		res.json({
+			files,
+			sections: filesBySection,
+			total: files.length
+		})
+	} catch (error) {
+		console.error('Error retrieving student files:', error)
+		res.status(500).json({ error: error.message })
+	}
+})
+
+// Get specific file details for students
+app.get('/api/student/files/:id', async (req, res) => {
+	try {
+		const { id } = req.params
+		
+		const file = await File.findById(id)
+		if (!file) {
+			return res.status(404).json({ error: 'File not found' })
+		}
+		
+		// Students can only access processed files
+		if (file.status !== 'processed') {
+			return res.status(403).json({ error: 'File not available for viewing' })
+		}
+		
+		res.json(file)
+	} catch (error) {
+		console.error('Get student file details error:', error)
+		res.status(500).json({ error: error.message })
+	}
+})
+
+// Download file summary as PDF for students
+app.get('/api/student/files/:id/download', async (req, res) => {
+	try {
+		const { id } = req.params
+		
+		const file = await File.findById(id)
+		if (!file) {
+			return res.status(404).json({ error: 'File not found' })
+		}
+		
+		// Students can only download processed files
+		if (file.status !== 'processed') {
+			return res.status(403).json({ error: 'File not available for download' })
+		}
+		
+		// Generate PDF content
+		const pdfContent = await generateFileSummaryPDF(file)
+		
+		// Set headers for PDF download
+		res.setHeader('Content-Type', 'application/pdf')
+		res.setHeader('Content-Disposition', `attachment; filename="${file.title || file.originalName}-summary.pdf"`)
+		
+		res.send(pdfContent)
+	} catch (error) {
+		console.error('Download file summary error:', error)
+		res.status(500).json({ error: error.message })
+	}
+})
+
+// Helper function to generate PDF summary
+async function generateFileSummaryPDF(file) {
+	try {
+		// For now, we'll create a simple text-based PDF
+		// In a real implementation, you'd use a library like puppeteer or jsPDF
+		const summary = file.aiAnalysis?.summary || file.description || 'No summary available'
+		const additionalInfo = file.aiAnalysis?.tags?.join(', ') || 'No additional information'
+		
+		const pdfContent = `
+%PDF-1.4
+1 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+
+2 0 obj
+<<
+/Type /Pages
+/Kids [3 0 R]
+/Count 1
+>>
+endobj
+
+3 0 obj
+<<
+/Type /Page
+/Parent 2 0 R
+/MediaBox [0 0 612 792]
+/Contents 4 0 R
+/Resources <<
+/Font <<
+/F1 5 0 R
+>>
+>>
+>>
+endobj
+
+4 0 obj
+<<
+/Length 500
+>>
+stream
+BT
+/F1 12 Tf
+50 750 Td
+(File Summary: ${file.title || file.originalName}) Tj
+0 -20 Td
+(Summary:) Tj
+0 -15 Td
+(${summary}) Tj
+0 -20 Td
+(Tags: ${additionalInfo}) Tj
+0 -15 Td
+(Subject: ${file.aiAnalysis?.subject || 'General'}) Tj
+0 -15 Td
+(Difficulty: ${file.aiAnalysis?.difficulty || 'medium'}) Tj
+0 -15 Td
+(File Size: ${file.size} bytes) Tj
+0 -15 Td
+(Uploaded: ${new Date(file.createdAt).toLocaleDateString()}) Tj
+ET
+endstream
+endobj
+
+5 0 obj
+<<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+>>
+endobj
+
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000274 00000 n 
+0000000830 00000 n 
+trailer
+<<
+/Size 6
+/Root 1 0 R
+>>
+startxref
+920
+%%EOF
+		`
+		
+		return Buffer.from(pdfContent.trim())
+	} catch (error) {
+		console.error('PDF generation error:', error)
+		throw error
+	}
+}
 
 const PORT = process.env.PORT || 4000
 server.listen(PORT, () => console.log(`API listening on http://localhost:${PORT}`))

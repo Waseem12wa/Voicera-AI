@@ -28,7 +28,10 @@ import { ProtectedRoute } from './routes/ProtectedRoute'
 import AdminLayout from './layouts/AdminLayout'
 const TeacherDashboard = lazy(() => import('./pages/teacher/TeacherDashboard'))
 const EnhancedTeacherDashboard = lazy(() => import('./pages/teacher/EnhancedTeacherDashboard'))
+const FileDetailPage = lazy(() => import('./pages/teacher/FileDetailPage'))
 const StudentDashboard = lazy(() => import('./pages/student/StudentDashboard'))
+const StudentFileView = lazy(() => import('./pages/student/StudentFileView'))
+const StudentFileDetailPage = lazy(() => import('./pages/student/StudentFileDetailPage'))
 
 const HomeRouter = () => {
   const auth = useSelector((s: RootState) => s.auth)
@@ -81,10 +84,14 @@ function App() {
             </Route>
             <Route element={<ProtectedRoute roles={["teacher"]} />}>
               <Route path="/teacher" element={<EnhancedTeacherDashboard />} />
+              <Route path="/teacher/dashboard" element={<EnhancedTeacherDashboard />} />
+              <Route path="/teacher/file/:fileId" element={<FileDetailPage />} />
               <Route path="/teacher/legacy" element={<TeacherDashboard />} />
             </Route>
             <Route element={<ProtectedRoute roles={["student"]} />}>
               <Route path="/student" element={<StudentDashboard />} />
+              <Route path="/student/files" element={<StudentFileView />} />
+              <Route path="/student/file/:fileId" element={<StudentFileDetailPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

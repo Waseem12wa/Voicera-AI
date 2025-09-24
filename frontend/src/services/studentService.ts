@@ -1,119 +1,88 @@
 import api from './apiClient'
 
-// Student Course Management
-export const getStudentCourses = async () => {
-	const { data } = await api.get('/student/courses')
-	return data
+// Student file access
+export const getStudentFiles = async (section?: string) => {
+	const params = section && section !== 'all' ? { section } : {}
+	const response = await api.get('/student/files', { params })
+	return response.data
 }
 
-export const enrollInCourse = async (courseId: string) => {
-	const { data } = await api.post(`/student/courses/${courseId}/enroll`)
-	return data
+export const getStudentFileDetails = async (fileId: string) => {
+	const response = await api.get(`/student/files/${fileId}`)
+	return response.data
 }
 
-// Student Quiz Management
+export const downloadFileSummary = async (fileId: string) => {
+	const response = await api.get(`/student/files/${fileId}/download`, {
+		responseType: 'blob'
+	})
+	return response.data
+}
+
+// Student quiz access
 export const getStudentQuizzes = async () => {
-	const { data } = await api.get('/student/quizzes')
-	return data
+	const response = await api.get('/student/quizzes')
+	return response.data
 }
 
+export const getStudentQuizById = async (quizId: string) => {
+	const response = await api.get(`/student/quizzes/${quizId}`)
+	return response.data
+}
+
+export const submitQuizAnswer = async (quizId: string, answers: any[]) => {
+	const response = await api.post(`/student/quizzes/${quizId}/submit`, {
+		answers
+	})
+	return response.data
+}
+
+// Student courses and enrollment
+export const getStudentCourses = async () => {
+	const response = await api.get('/student/courses')
+	return response.data
+}
+
+// Student quiz access
 export const getAssignedQuizzes = async () => {
-	const { data } = await api.get('/student/assigned-quizzes')
-	return data
+	const response = await api.get('/student/assigned-quizzes')
+	return response.data
 }
 
-export const submitQuizAnswer = async (quizId: string, answers: {[key: string]: number}) => {
-	const { data } = await api.post(`/student/quizzes/${quizId}/submit`, { answers })
-	return data
-}
-
-export const getQuizResults = async (quizId: string) => {
-	const { data } = await api.get(`/student/quizzes/${quizId}/results`)
-	return data
-}
-
-// Student Progress Tracking
-export const getStudentProgress = async () => {
-	const { data } = await api.get('/student/progress')
-	return data
-}
-
-export const updateLearningPath = async (pathData: any) => {
-	const { data } = await api.post('/student/learning-path', pathData)
-	return data
-}
-
-// Student Notes Management
+// Student notes
 export const saveStudentNote = async (title: string, content: string, courseId?: string) => {
-	const { data } = await api.post('/student/notes', { title, content, courseId })
-	return data
+	const response = await api.post('/student/notes', { title, content, courseId })
+	return response.data
 }
 
 export const getStudentNotes = async () => {
-	const { data } = await api.get('/student/notes')
-	return data
+	const response = await api.get('/student/notes')
+	return response.data
 }
 
-export const updateStudentNote = async (noteId: string, title: string, content: string) => {
-	const { data } = await api.put(`/student/notes/${noteId}`, { title, content })
-	return data
-}
-
-export const deleteStudentNote = async (noteId: string) => {
-	const { data } = await api.delete(`/student/notes/${noteId}`)
-	return data
-}
-
-// AI Assistant for Students
+// AI interactions
 export const askAIQuestion = async (question: string, courseId?: string) => {
-	const { data } = await api.post('/student/ai/ask', { question, courseId })
-	return data
+	const response = await api.post('/student/ask-question', { question, courseId })
+	return response.data
 }
 
 export const getStudentInteractions = async () => {
-	const { data } = await api.get('/student/ai/interactions')
-	return data
+	const response = await api.get('/student/interactions')
+	return response.data
 }
 
-export const getPersonalizedContent = async (learningStyle: string, pace: string) => {
-	const { data } = await api.post('/student/ai/personalized', { learningStyle, pace })
-	return data
-}
-
-// Voice and Text Processing
-export const processVoiceQuestion = async (audioBlob: Blob, courseId?: string) => {
-	const formData = new FormData()
-	formData.append('audio', audioBlob, 'question.wav')
-	if (courseId) formData.append('courseId', courseId)
-	
-	const { data } = await api.post('/student/ai/voice', formData, {
-		headers: { 'Content-Type': 'multipart/form-data' }
-	})
-	return data
-}
-
-export const getTextToSpeech = async (text: string) => {
-	const { data } = await api.post('/student/ai/tts', { text })
-	return data
-}
-
-// Student Notifications
+// Notifications
 export const getStudentNotifications = async () => {
-	const { data } = await api.get('/student/notifications')
-	return data
+	const response = await api.get('/student/notifications')
+	return response.data
 }
 
 export const markNotificationAsRead = async (notificationId: string) => {
-	const { data } = await api.post(`/student/notifications/${notificationId}/read`)
-	return data
+	const response = await api.post(`/student/notifications/${notificationId}/read`)
+	return response.data
 }
 
-export const markAllNotificationsAsRead = async () => {
-	const { data } = await api.post('/student/notifications/read-all')
-	return data
-}
-
-// Real-time socket connection for students
+// Real-time connection
 export const connectToStudentRoom = (studentEmail: string, onMessage: (event: string, data: any) => void) => {
 	const socket = new WebSocket(`ws://localhost:4000`)
 	
@@ -130,4 +99,20 @@ export const connectToStudentRoom = (studentEmail: string, onMessage: (event: st
 	}
 	
 	return socket
+}
+
+// Student profile and progress
+export const getStudentProfile = async () => {
+	const response = await api.get('/student/profile')
+	return response.data
+}
+
+export const updateStudentProfile = async (profileData: any) => {
+	const response = await api.put('/student/profile', profileData)
+	return response.data
+}
+
+export const getStudentProgress = async () => {
+	const response = await api.get('/student/progress')
+	return response.data
 }

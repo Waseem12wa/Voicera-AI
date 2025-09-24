@@ -411,56 +411,176 @@ const EnhancedTeacherDashboard = () => {
 				</Button>
 			</Box>
 			
-			<Typography variant="h5" mb={2} sx={{ textAlign: 'center', fontWeight: 'bold' }}>
-				Enhanced Teacher Dashboard
+			<Typography variant="h4" mb={3} sx={{ 
+				textAlign: 'center', 
+				fontWeight: 'bold',
+				background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+				backgroundClip: 'text',
+				WebkitBackgroundClip: 'text',
+				WebkitTextFillColor: 'transparent',
+				fontSize: '2.5rem',
+				textShadow: '0 2px 4px rgba(0,0,0,0.1)'
+			}}>
+				🎓 Enhanced Teacher Dashboard
 			</Typography>
 			
-			<Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ mb: 2, width: '100%', justifyContent: 'center' }}>
-				<Tab label="Files & Content" />
-				<Tab label="AI Interactions" />
-				<Tab label="Generated Quizzes" />
-				<Tab label="Student Management" />
-				<Tab label="Analytics" />
+			<Tabs 
+				value={tab} 
+				onChange={(_e, v) => setTab(v)} 
+				sx={{ 
+					mb: 3, 
+					width: '100%', 
+					justifyContent: 'center',
+					'& .MuiTab-root': {
+						borderRadius: '12px 12px 0 0',
+						margin: '0 4px',
+						fontWeight: 'bold',
+						fontSize: '0.95rem',
+						textTransform: 'none',
+						minHeight: '48px',
+						transition: 'all 0.3s ease',
+						'&:hover': {
+							backgroundColor: 'rgba(102, 126, 234, 0.1)',
+							transform: 'translateY(-2px)'
+						}
+					},
+					'& .Mui-selected': {
+						background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+						color: 'white !important',
+						boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
+						transform: 'translateY(-2px)'
+					},
+					'& .MuiTabs-indicator': {
+						display: 'none'
+					}
+				}}
+			>
+				<Tab label="📁 Files & Content" />
+				<Tab label="🤖 AI Interactions" />
+				<Tab label="📝 Generated Quizzes" />
+				<Tab label="👥 Student Management" />
+				<Tab label="📊 Analytics" />
 			</Tabs>
 
 			{/* Files & Content Tab */}
 			{tab === 0 && (
 				<Box sx={{ width: '100%' }}>
 					{/* Section Navigation */}
-					<Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap' }}>
-						{sections.map((section) => (
+					<Stack direction="row" spacing={1} sx={{ mb: 3, flexWrap: 'wrap', justifyContent: 'center' }}>
+						{sections.map((section) => {
+							const getSectionStyle = (key: string) => {
+								const isSelected = selectedSection === key
+								switch (key) {
+									case 'all': return {
+										bg: isSelected ? 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)' : 'rgba(25, 118, 210, 0.1)',
+										color: isSelected ? 'white' : '#1976d2',
+										border: '2px solid #1976d2'
+									}
+									case 'lectures': return {
+										bg: isSelected ? 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)' : 'rgba(25, 118, 210, 0.1)',
+										color: isSelected ? 'white' : '#1976d2',
+										border: '2px solid #1976d2'
+									}
+									case 'assignments': return {
+										bg: isSelected ? 'linear-gradient(135deg, #1e88e5 0%, #1976d2 100%)' : 'rgba(30, 136, 229, 0.1)',
+										color: isSelected ? 'white' : '#1e88e5',
+										border: '2px solid #1e88e5'
+									}
+									case 'quizzes': return {
+										bg: isSelected ? 'linear-gradient(135deg, #2196f3 0%, #1976d2 100%)' : 'rgba(33, 150, 243, 0.1)',
+										color: isSelected ? 'white' : '#2196f3',
+										border: '2px solid #2196f3'
+									}
+									case 'notes': return {
+										bg: isSelected ? 'linear-gradient(135deg, #42a5f5 0%, #1976d2 100%)' : 'rgba(66, 165, 245, 0.1)',
+										color: isSelected ? 'white' : '#42a5f5',
+										border: '2px solid #42a5f5'
+									}
+									case 'resources': return {
+										bg: isSelected ? 'linear-gradient(135deg, #64b5f6 0%, #1976d2 100%)' : 'rgba(100, 181, 246, 0.1)',
+										color: isSelected ? 'white' : '#64b5f6',
+										border: '2px solid #64b5f6'
+									}
+									default: return {
+										bg: isSelected ? 'linear-gradient(135deg, #e3f2fd 0%, #1976d2 100%)' : 'rgba(227, 242, 253, 0.1)',
+										color: isSelected ? 'white' : '#1976d2',
+										border: '2px solid #1976d2'
+									}
+								}
+							}
+							
+							const sectionStyle = getSectionStyle(section.key)
+							
+							return (
 							<Chip
 								key={section.key}
 								label={`${section.label} (${section.count})`}
-								variant={selectedSection === section.key ? 'filled' : 'outlined'}
 								onClick={() => setSelectedSection(section.key)}
 								sx={{ 
 									borderRadius: '50px',
 									fontWeight: 'bold',
-									mb: 1
-								}}
-							/>
-						))}
+										mb: 1,
+										background: sectionStyle.bg,
+										color: sectionStyle.color,
+										border: sectionStyle.border,
+										px: 2,
+										py: 1,
+										fontSize: '0.9rem',
+										transition: 'all 0.3s ease',
+										'&:hover': {
+											transform: 'scale(1.05)',
+											boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+										}
+									}}
+								/>
+							)
+						})}
 					</Stack>
 
 					{/* Content Input Options */}
-					<Paper sx={{ p: 3, mb: 2 }}>
-						<Typography variant="h6" gutterBottom>
+					<Paper sx={{ 
+						p: 4, 
+						mb: 3, 
+						borderRadius: '20px',
+						background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+						boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
+					}}>
+						<Typography variant="h5" gutterBottom sx={{ 
+							fontWeight: 'bold', 
+							textAlign: 'center',
+							background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+							backgroundClip: 'text',
+							WebkitBackgroundClip: 'text',
+							WebkitTextFillColor: 'transparent',
+							mb: 2
+						}}>
 							📚 Add Content for AI Analysis
 						</Typography>
-						<Typography variant="body2" color="text.secondary" gutterBottom>
-							Choose how you want to add content. All options support AI-powered quiz generation.
+						<Typography variant="body1" color="text.secondary" gutterBottom sx={{ textAlign: 'center', mb: 3 }}>
+							Choose how you want to add content. All options support AI-powered quiz generation and automatic analysis.
 						</Typography>
 						
-						<Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mt: 2 }}>
+						<Stack direction={{ xs: 'column', md: 'row' }} spacing={3} sx={{ mt: 2 }}>
 							{/* Option 1: Upload Files */}
-							<Paper sx={{ p: 2, flex: 1, border: '2px solid', borderColor: 'primary.main' }}>
+							<Paper sx={{ 
+								p: 3, 
+								flex: 1, 
+								borderRadius: '16px',
+								background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+								color: 'white',
+								boxShadow: '0 8px 32px rgba(102, 126, 234, 0.3)',
+								transition: 'all 0.3s ease',
+								'&:hover': {
+									transform: 'translateY(-4px)',
+									boxShadow: '0 12px 40px rgba(102, 126, 234, 0.4)'
+								}
+							}}>
 								<Stack alignItems="center" spacing={2}>
-									<DocumentIcon sx={{ fontSize: 40, color: 'primary.main' }} />
-									<Typography variant="h6" align="center">
+									<DocumentIcon sx={{ fontSize: 50, color: 'white' }} />
+									<Typography variant="h6" align="center" sx={{ fontWeight: 'bold' }}>
 										📄 Upload Files
 									</Typography>
-									<Typography variant="body2" color="text.secondary" align="center">
+									<Typography variant="body2" align="center" sx={{ opacity: 0.9 }}>
 										Upload documents (PDF, PPT, DOC, TXT) for AI analysis
 									</Typography>
 									<Button
@@ -471,7 +591,14 @@ const EnhancedTeacherDashboard = () => {
 											borderRadius: '50px',
 											fontWeight: 'bold',
 											px: 3,
-											py: 1
+											py: 1,
+											bgcolor: 'rgba(255,255,255,0.2)',
+											color: 'white',
+											backdropFilter: 'blur(10px)',
+											'&:hover': { 
+												bgcolor: 'rgba(255,255,255,0.3)',
+												transform: 'scale(1.05)'
+											}
 										}}
 									>
 										Choose Files
@@ -481,13 +608,25 @@ const EnhancedTeacherDashboard = () => {
 							</Paper>
 
 							{/* Option 2: Voice Recording */}
-							<Paper sx={{ p: 2, flex: 1, border: '2px solid', borderColor: 'success.main' }}>
+							<Paper sx={{ 
+								p: 3, 
+								flex: 1, 
+								borderRadius: '16px',
+								background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+								color: 'white',
+								boxShadow: '0 8px 32px rgba(67, 233, 123, 0.3)',
+								transition: 'all 0.3s ease',
+								'&:hover': {
+									transform: 'translateY(-4px)',
+									boxShadow: '0 12px 40px rgba(67, 233, 123, 0.4)'
+								}
+							}}>
 								<Stack alignItems="center" spacing={2}>
-									<MicIcon sx={{ fontSize: 40, color: 'success.main' }} />
-									<Typography variant="h6" align="center">
+									<MicIcon sx={{ fontSize: 50, color: 'white' }} />
+									<Typography variant="h6" align="center" sx={{ fontWeight: 'bold' }}>
 										🎤 Speak Voice
 									</Typography>
-									<Typography variant="body2" color="text.secondary" align="center">
+									<Typography variant="body2" align="center" sx={{ opacity: 0.9 }}>
 										Record your voice directly in the browser
 									</Typography>
 									<Button
@@ -499,8 +638,13 @@ const EnhancedTeacherDashboard = () => {
 											fontWeight: 'bold',
 											px: 3,
 											py: 1,
-											bgcolor: 'success.main',
-											'&:hover': { bgcolor: 'success.dark' }
+											bgcolor: 'rgba(255,255,255,0.2)',
+											color: 'white',
+											backdropFilter: 'blur(10px)',
+											'&:hover': { 
+												bgcolor: 'rgba(255,255,255,0.3)',
+												transform: 'scale(1.05)'
+											}
 										}}
 									>
 										Start Recording
@@ -509,13 +653,25 @@ const EnhancedTeacherDashboard = () => {
 							</Paper>
 
 							{/* Option 3: Upload Audio */}
-							<Paper sx={{ p: 2, flex: 1, border: '2px solid', borderColor: 'warning.main' }}>
+							<Paper sx={{ 
+								p: 3, 
+								flex: 1, 
+								borderRadius: '16px',
+								background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+								color: 'white',
+								boxShadow: '0 8px 32px rgba(250, 112, 154, 0.3)',
+								transition: 'all 0.3s ease',
+								'&:hover': {
+									transform: 'translateY(-4px)',
+									boxShadow: '0 12px 40px rgba(250, 112, 154, 0.4)'
+								}
+							}}>
 								<Stack alignItems="center" spacing={2}>
-									<VolumeIcon sx={{ fontSize: 40, color: 'warning.main' }} />
-									<Typography variant="h6" align="center">
+									<VolumeIcon sx={{ fontSize: 50, color: 'white' }} />
+									<Typography variant="h6" align="center" sx={{ fontWeight: 'bold' }}>
 										🎵 Upload Audio
 									</Typography>
-									<Typography variant="body2" color="text.secondary" align="center">
+									<Typography variant="body2" align="center" sx={{ opacity: 0.9 }}>
 										Upload audio files (MP3, WAV, M4A) up to 100MB
 									</Typography>
 									<Button
@@ -527,8 +683,13 @@ const EnhancedTeacherDashboard = () => {
 											fontWeight: 'bold',
 											px: 3,
 											py: 1,
-											bgcolor: 'warning.main',
-											'&:hover': { bgcolor: 'warning.dark' }
+											bgcolor: 'rgba(255,255,255,0.2)',
+											color: 'white',
+											backdropFilter: 'blur(10px)',
+											'&:hover': { 
+												bgcolor: 'rgba(255,255,255,0.3)',
+												transform: 'scale(1.05)'
+											}
 										}}
 									>
 										Upload Audio
@@ -562,56 +723,142 @@ const EnhancedTeacherDashboard = () => {
 					)}
 					
 					{!filesLoading && !filesError && (
-						<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 2 }}>
-							{(filesData?.files || []).map((file: any) => (
-							<Card key={file._id} sx={{ height: '100%' }}>
-								<CardContent>
+						<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 3 }}>
+							{(filesData?.files || []).map((file: any) => {
+								// Determine card color based on section
+								const getSectionColor = (section: string) => {
+									switch (section) {
+										case 'lectures': return { bg: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)', text: 'white' }
+										case 'assignments': return { bg: 'linear-gradient(135deg, #1e88e5 0%, #1976d2 100%)', text: 'white' }
+										case 'quizzes': return { bg: 'linear-gradient(135deg, #2196f3 0%, #1976d2 100%)', text: 'white' }
+										case 'notes': return { bg: 'linear-gradient(135deg, #42a5f5 0%, #1976d2 100%)', text: 'white' }
+										case 'resources': return { bg: 'linear-gradient(135deg, #64b5f6 0%, #1976d2 100%)', text: 'white' }
+										case 'voice': return { bg: 'linear-gradient(135deg, #90caf9 0%, #1976d2 100%)', text: 'white' }
+										case 'audio': return { bg: 'linear-gradient(135deg, #bbdefb 0%, #1976d2 100%)', text: 'white' }
+										default: return { bg: 'linear-gradient(135deg, #e3f2fd 0%, #1976d2 100%)', text: 'white' }
+									}
+								}
+								
+								const sectionColors = getSectionColor(file.section)
+								
+								return (
+								<Card 
+									key={file._id} 
+									onClick={() => navigate(`/teacher/file/${file._id}`)}
+									sx={{ 
+										height: '100%', 
+										background: sectionColors.bg,
+										color: sectionColors.text,
+										borderRadius: '16px',
+										boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+										transition: 'all 0.3s ease',
+										cursor: 'pointer',
+										'&:hover': {
+											transform: 'translateY(-4px)',
+											boxShadow: '0 12px 40px rgba(0,0,0,0.15)'
+										}
+									}}
+								>
+									<CardContent sx={{ p: 3 }}>
 									<Stack direction="row" justifyContent="space-between" alignItems="flex-start">
 										<Box sx={{ flex: 1 }}>
-											<Typography variant="h6" noWrap>
+												<Typography variant="h6" noWrap sx={{ 
+													fontWeight: 'bold',
+													fontSize: '1.1rem',
+													mb: 1,
+													textShadow: '0 1px 2px rgba(0,0,0,0.1)'
+												}}>
 												{file.title || file.originalName}
 											</Typography>
-											<Typography variant="body2" color="text.secondary" gutterBottom>
-												{file.aiAnalysis?.summary || 'No summary available'}
-											</Typography>
-											<Stack direction="row" spacing={1} sx={{ mb: 1 }}>
-												<Chip label={file.section} size="small" />
-												<Chip label={file.aiAnalysis?.difficulty || 'unknown'} size="small" />
+												<Typography variant="body2" sx={{ 
+													mb: 2, 
+													opacity: 0.9,
+													lineHeight: 1.4,
+													fontSize: '0.9rem'
+												}}>
+													{file.aiAnalysis?.summary || file.description || `Processing ${file.originalName}...`}
+												</Typography>
+												<Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+													<Chip 
+														label={file.section} 
+														size="small" 
+														sx={{ 
+															bgcolor: 'rgba(255,255,255,0.2)', 
+															color: 'inherit',
+															fontWeight: 'bold',
+															backdropFilter: 'blur(10px)'
+														}} 
+													/>
+													<Chip 
+														label={file.aiAnalysis?.difficulty || 'medium'} 
+														size="small" 
+														sx={{ 
+															bgcolor: 'rgba(255,255,255,0.2)', 
+															color: 'inherit',
+															fontWeight: 'bold',
+															backdropFilter: 'blur(10px)'
+														}} 
+													/>
 											</Stack>
-											{file.aiAnalysis?.tags && (
-												<Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
-													{file.aiAnalysis.tags.slice(0, 3).map((tag: string) => (
-														<Chip key={tag} label={tag} size="small" variant="outlined" />
-													))}
-												</Stack>
-											)}
+											<Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+												{(file.aiAnalysis?.tags || ['educational', 'learning']).slice(0, 3).map((tag: string) => (
+													<Chip 
+														key={tag} 
+														label={tag} 
+														size="small" 
+														variant="outlined" 
+														sx={{ 
+															borderColor: 'rgba(255,255,255,0.5)',
+															color: 'inherit',
+															fontSize: '0.75rem',
+															height: '20px'
+														}} 
+													/>
+												))}
+											</Stack>
 										</Box>
-										<Stack direction="column" spacing={1}>
-											<Button
-												variant="contained"
-												size="small"
-												startIcon={<QuizIcon />}
-												onClick={() => {
-													setSelectedFile(file)
-													setQuizDialogOpen(true)
-												}}
-												sx={{ 
-													borderRadius: '20px',
-													fontSize: '0.75rem',
-													px: 1.5,
-													py: 0.5,
-													minWidth: 'auto',
-													bgcolor: 'primary.main',
-													'&:hover': { bgcolor: 'primary.dark' }
-												}}
-											>
-												AI Quiz
-											</Button>
+											<Stack direction="column" spacing={1}>
+												<Button
+													variant="contained"
+													size="small"
+													startIcon={<QuizIcon />}
+													onClick={(e) => {
+														e.stopPropagation()
+														setSelectedFile(file)
+														setQuizDialogOpen(true)
+													}}
+													sx={{ 
+														borderRadius: '20px',
+														bgcolor: 'rgba(255,255,255,0.2)',
+														color: 'inherit',
+														fontWeight: 'bold',
+														backdropFilter: 'blur(10px)',
+														fontSize: '0.75rem',
+														px: 1.5,
+														py: 0.5,
+														minWidth: 'auto',
+														'&:hover': {
+															bgcolor: 'rgba(255,255,255,0.3)',
+															transform: 'scale(1.05)'
+														}
+													}}
+												>
+													🎯 AI Quiz
+												</Button>
 											<IconButton 
 												size="small"
-												onClick={() => handleDeleteFile(file)}
+												onClick={(e) => {
+													e.stopPropagation()
+													handleDeleteFile(file)
+												}}
 												title="Delete File"
-												color="error"
+													sx={{ 
+														color: 'rgba(255,255,255,0.8)',
+														'&:hover': { 
+															color: 'white',
+															bgcolor: 'rgba(255,255,255,0.1)'
+														}
+													}}
 											>
 												<DeleteIcon />
 											</IconButton>
@@ -619,7 +866,8 @@ const EnhancedTeacherDashboard = () => {
 									</Stack>
 								</CardContent>
 							</Card>
-						))}
+								)
+							})}
 						</Box>
 					)}
 				</Box>
