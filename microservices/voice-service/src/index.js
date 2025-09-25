@@ -1,10 +1,13 @@
+// Load environment variables first
+import dotenv from 'dotenv'
+dotenv.config()
+
 import express from 'express'
 import cors from 'cors'
 import morgan from 'morgan'
 import helmet from 'helmet'
 import compression from 'compression'
 import rateLimit from 'express-rate-limit'
-import dotenv from 'dotenv'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 import mongoose from 'mongoose'
@@ -16,9 +19,10 @@ import promClient from 'prom-client'
 // Import services and middleware
 import { VoiceProcessor } from './services/voiceProcessor.js'
 import { CommandProcessor } from './services/commandProcessor.js'
+import { MultilingualProcessor } from './services/multilingualProcessor.js'
 import { CacheService } from './services/cacheService.js'
 import { MetricsService } from './services/metricsService.js'
-import { CircuitBreaker } from './middleware/circuitBreaker.js'
+import CircuitBreakerService from './middleware/circuitBreaker.js'
 import { healthCheck } from './middleware/healthCheck.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { requestLogger } from './middleware/requestLogger.js'
@@ -58,6 +62,7 @@ const io = new Server(server, {
 const cacheService = new CacheService(redis)
 const metricsService = new MetricsService()
 const voiceProcessor = new VoiceProcessor(cacheService, metricsService)
+const multilingualProcessor = new MultilingualProcessor(cacheService, metricsService)
 const commandProcessor = new CommandProcessor(voiceProcessor, cacheService)
 
 // Configure logging
@@ -116,7 +121,7 @@ app.get('/metrics', async (req, res) => {
 // Voice processing routes
 app.post('/api/voice/process', async (req, res) => {
   try {
-    const { command, context, userId, sessionId } = req.body
+    const { command, context, userId, sessionId, language = 'en' } = req.body
     
     if (!command) {
       return res.status(400).json({ error: 'Command is required' })
@@ -128,6 +133,7 @@ app.post('/api/voice/process', async (req, res) => {
       context: context || {},
       userId,
       sessionId,
+      language,
       timestamp: new Date().toISOString()
     }, {
       attempts: 3,
@@ -146,6 +152,120 @@ app.post('/api/voice/process', async (req, res) => {
 
   } catch (error) {
     logger.error('Error processing voice command:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// Audio transcription endpoint
+app.post('/api/voice/transcribe', async (req, res) => {
+  try {
+    const { audio, language = 'en', mimeType = 'audio/webm' } = req.body
+    
+    if (!audio) {
+      return res.status(400).json({ error: 'Audio data is required' })
+    }
+
+    // Add job to queue for transcription
+    const job = await voiceQueue.add('transcribe-audio', {
+      audio,
+      language,
+      mimeType,
+      timestamp: new Date().toISOString()
+    }, {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 2000
+      }
+    })
+
+    res.json({
+      jobId: job.id,
+      status: 'queued',
+      message: 'Audio transcription queued for processing'
+    })
+
+  } catch (error) {
+    logger.error('Error transcribing audio:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// Multilingual command processing
+app.post('/api/voice/multilingual', async (req, res) => {
+  try {
+    const { command, language = 'en', context, userId, sessionId } = req.body
+    
+    if (!command) {
+      return res.status(400).json({ error: 'Command is required' })
+    }
+
+    // Process multilingual command directly
+    const result = await multilingualProcessor.processMultilingualCommand(
+      command, 
+      language, 
+      { ...context, userId, sessionId }
+    )
+
+    res.json(result)
+
+  } catch (error) {
+    logger.error('Error processing multilingual command:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// Get supported languages
+app.get('/api/voice/languages', async (req, res) => {
+  try {
+    const languages = multilingualProcessor.getSupportedLanguages()
+    res.json({ languages })
+  } catch (error) {
+    logger.error('Error getting supported languages:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// Translate text
+app.post('/api/voice/translate', async (req, res) => {
+  try {
+    const { text, fromLanguage = 'en', toLanguage = 'en' } = req.body
+    
+    if (!text) {
+      return res.status(400).json({ error: 'Text is required' })
+    }
+
+    const translation = await multilingualProcessor.translateText(text, fromLanguage, toLanguage)
+    
+    res.json({
+      originalText: text,
+      translatedText: translation,
+      fromLanguage,
+      toLanguage
+    })
+
+  } catch (error) {
+    logger.error('Error translating text:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// Get language-specific suggestions
+app.get('/api/voice/suggestions/:language', async (req, res) => {
+  try {
+    const { language } = req.params
+    const { userId, limit = 5 } = req.query
+    
+    const suggestions = await multilingualProcessor.getLanguageSpecificSuggestions(
+      language, 
+      userId, 
+      parseInt(limit)
+    )
+    
+    res.json({ suggestions, language })
+
+  } catch (error) {
+    logger.error('Error getting language-specific suggestions:', error)
     res.status(500).json({ error: 'Internal server error' })
   }
 })
@@ -240,13 +360,17 @@ io.on('connection', (socket) => {
 
 // Process voice commands from queue
 voiceQueue.process('process-voice', async (job) => {
-  const { command, context, userId, sessionId } = job.data
+  const { command, context, userId, sessionId, language = 'en' } = job.data
   
   try {
-    logger.info(`Processing voice command: ${command}`)
+    logger.info(`Processing voice command: ${command} in ${language}`)
     
-    // Process the voice command
-    const result = await commandProcessor.processCommand(command, context, userId)
+    // Process the voice command with multilingual support
+    const result = await multilingualProcessor.processMultilingualCommand(
+      command, 
+      language, 
+      { ...context, userId, sessionId }
+    )
     
     // Update metrics
     metricsService.incrementVoiceCommandsProcessed()
@@ -271,6 +395,75 @@ voiceQueue.process('process-voice', async (job) => {
     throw error
   }
 })
+
+// Process audio transcription from queue
+voiceQueue.process('transcribe-audio', async (job) => {
+  const { audio, language, mimeType } = job.data
+  
+  try {
+    logger.info(`Transcribing audio in ${language}`)
+    
+    // Convert base64 audio to buffer
+    const audioBuffer = Buffer.from(audio, 'base64')
+    
+    // For now, we'll simulate transcription
+    // In a real implementation, you would use:
+    // - Google Speech-to-Text API
+    // - Azure Speech Services
+    // - AWS Transcribe
+    // - OpenAI Whisper API
+    // - Or other speech recognition services
+    
+    // Simulate processing time
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    
+    // Generate simulated transcript based on language
+    const transcript = generateSimulatedTranscript(language)
+    
+    const result = {
+      transcript,
+      language,
+      confidence: 0.85,
+      duration: audioBuffer.length / 1000, // Simulated duration
+      timestamp: new Date().toISOString()
+    }
+    
+    // Update metrics
+    metricsService.incrementVoiceCommandsProcessed()
+    metricsService.recordProcessingTime(Date.now() - job.timestamp)
+    
+    // Cache result
+    await cacheService.set(`transcribe:result:${job.id}`, result, 3600) // 1 hour
+    
+    return result
+
+  } catch (error) {
+    logger.error(`Error transcribing audio ${job.id}:`, error)
+    metricsService.incrementVoiceCommandsFailed()
+    throw error
+  }
+})
+
+// Helper function to generate simulated transcripts
+function generateSimulatedTranscript(language) {
+  const transcripts = {
+    'en': 'Hello, I would like to ask about my courses and assignments. Can you help me understand the material better?',
+    'es': 'Hola, me gustaría preguntar sobre mis cursos y tareas. ¿Puedes ayudarme a entender mejor el material?',
+    'fr': 'Bonjour, je voudrais poser des questions sur mes cours et mes devoirs. Pouvez-vous m\'aider à mieux comprendre le matériel?',
+    'de': 'Hallo, ich möchte Fragen zu meinen Kursen und Aufgaben stellen. Können Sie mir helfen, den Stoff besser zu verstehen?',
+    'it': 'Ciao, vorrei fare domande sui miei corsi e compiti. Puoi aiutarmi a capire meglio il materiale?',
+    'pt': 'Olá, gostaria de fazer perguntas sobre meus cursos e tarefas. Você pode me ajudar a entender melhor o material?',
+    'ru': 'Привет, я хотел бы задать вопросы о моих курсах и заданиях. Можете ли вы помочь мне лучше понять материал?',
+    'ja': 'こんにちは、私のコースと課題について質問したいと思います。資料をより良く理解するのを手伝ってもらえますか？',
+    'ko': '안녕하세요, 제 과정과 과제에 대해 질문하고 싶습니다. 자료를 더 잘 이해할 수 있도록 도와주실 수 있나요?',
+    'zh': '你好，我想问一下我的课程和作业。你能帮我更好地理解材料吗？',
+    'ar': 'مرحبا، أود أن أسأل عن دوراتي وواجباتي. هل يمكنك مساعدتي في فهم المادة بشكل أفضل؟',
+    'hi': 'नमस्ते, मैं अपने पाठ्यक्रम और असाइनमेंट के बारे में पूछना चाहूंगा। क्या आप मुझे सामग्री को बेहतर समझने में मदद कर सकते हैं?',
+    'ur': 'السلام علیکم، میں اپنے کورسز اور اسائنمنٹس کے بارے میں پوچھنا چاہوں گا۔ کیا آپ مجھے مواد کو بہتر سمجھنے میں مدد کر سکتے ہیں؟'
+  }
+  
+  return transcripts[language] || transcripts['en']
+}
 
 // Error handling middleware
 app.use(errorHandler)

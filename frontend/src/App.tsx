@@ -32,6 +32,7 @@ const FileDetailPage = lazy(() => import('./pages/teacher/FileDetailPage'))
 const StudentDashboard = lazy(() => import('./pages/student/StudentDashboard'))
 const StudentFileView = lazy(() => import('./pages/student/StudentFileView'))
 const StudentFileDetailPage = lazy(() => import('./pages/student/StudentFileDetailPage'))
+const MultilingualFiles = lazy(() => import('./pages/student/MultilingualFilesSimple'))
 
 const HomeRouter = () => {
   const auth = useSelector((s: RootState) => s.auth)
@@ -92,6 +93,7 @@ function App() {
               <Route path="/student" element={<StudentDashboard />} />
               <Route path="/student/files" element={<StudentFileView />} />
               <Route path="/student/file/:fileId" element={<StudentFileDetailPage />} />
+              <Route path="/student/multilingual" element={<MultilingualFiles />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

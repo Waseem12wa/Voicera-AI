@@ -16,7 +16,9 @@ import {
 	PlayArrow as PlayIcon,
 	Pause as PauseIcon,
 	Notifications as NotificationsIcon,
-	Assignment as AssignmentIcon
+	Assignment as AssignmentIcon,
+	Language as LanguageIcon,
+	Translate as TranslateIcon
 } from '@mui/icons-material'
 import { 
 	getStudentCourses,
@@ -32,6 +34,7 @@ import {
 	markNotificationAsRead,
 	connectToStudentRoom
 } from '../../services/studentService'
+import VoiceRecorder from '../../components/voice/VoiceRecorder'
 
 const StudentDashboard = () => {
 	const [tab, setTab] = useState(0)
@@ -48,6 +51,9 @@ const StudentDashboard = () => {
 	const [isRecording, setIsRecording] = useState(false)
 	const [quizResults, setQuizResults] = useState<any>(null)
 	const [showResults, setShowResults] = useState(false)
+	const [voiceTranscript, setVoiceTranscript] = useState('')
+	const [selectedLanguage, setSelectedLanguage] = useState('en')
+	const [voiceDialogOpen, setVoiceDialogOpen] = useState(false)
 	
 	const qc = useQueryClient()
 	const dispatch = useDispatch()
@@ -175,6 +181,21 @@ const StudentDashboard = () => {
 	const toggleRecording = () => {
 		setIsRecording(!isRecording)
 		// Voice recording functionality would be implemented here
+	}
+
+	const handleVoiceTranscript = (transcript: string, language: string) => {
+		setVoiceTranscript(transcript)
+		setSelectedLanguage(language)
+		setNewQuestion(transcript)
+		enqueueSnackbar(`Voice command received in ${language}`, { variant: 'success' })
+	}
+
+	const handleVoiceError = (error: string) => {
+		enqueueSnackbar(`Voice error: ${error}`, { variant: 'error' })
+	}
+
+	const openVoiceDialog = () => {
+		setVoiceDialogOpen(true)
 	}
 
 	return (
@@ -321,7 +342,7 @@ const StudentDashboard = () => {
 						</Typography>
 					</Paper>
 
-					<Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+					<Box sx={{ display: 'flex', justifyContent: 'center', mb: 3, gap: 2 }}>
 						<Button
 							variant="contained"
 							size="large"
@@ -338,6 +359,26 @@ const StudentDashboard = () => {
 							}}
 						>
 							📖 Browse All Learning Materials
+						</Button>
+						<Button
+							variant="outlined"
+							size="large"
+							onClick={() => navigate('/student/multilingual')}
+							startIcon={<LanguageIcon />}
+							sx={{
+								borderRadius: '50px',
+								fontWeight: 'bold',
+								px: 4,
+								py: 2,
+								borderColor: 'primary.main',
+								color: 'primary.main',
+								'&:hover': {
+									backgroundColor: 'primary.50',
+									borderColor: 'primary.dark'
+								}
+							}}
+						>
+							🌍 Multilingual Access
 						</Button>
 					</Box>
 
@@ -430,12 +471,67 @@ const StudentDashboard = () => {
 			{tab === 2 && (
 				<Box sx={{ width: '100%' }}>
 					<Paper sx={{ p: 2, mb: 2 }}>
-						<Typography variant="h6" gutterBottom>
-							🤖 AI Learning Assistant
+						<Stack direction="row" justifyContent="space-between" alignItems="center">
+							<Box>
+								<Typography variant="h6" gutterBottom>
+									🤖 AI Learning Assistant
+								</Typography>
+								<Typography variant="body2" color="text.secondary">
+									Ask questions about your courses and get AI-powered answers with sources. Use voice commands in your preferred language.
+								</Typography>
+							</Box>
+							<Button 
+								variant="contained"
+								onClick={openVoiceDialog}
+								startIcon={<MicIcon />}
+								sx={{ 
+									borderRadius: '50px',
+									fontWeight: 'bold',
+									px: 3,
+									py: 1,
+									background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+									'&:hover': {
+										background: 'linear-gradient(135deg, #1565c0 0%, #0d47a1 100%)'
+									}
+								}}
+							>
+								Voice Command
+							</Button>
+						</Stack>
+					</Paper>
+
+					{/* Voice Command Section */}
+					<Paper sx={{ p: 2, mb: 2 }}>
+						<Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+							<LanguageIcon color="primary" />
+							<Typography variant="h6" color="primary">
+								Multilingual Voice Commands
+							</Typography>
+						</Stack>
+						<Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+							Speak naturally in your preferred language. Voicera AI supports 20+ languages including English, Spanish, French, German, Italian, Portuguese, Russian, Japanese, Korean, Chinese, Arabic, Hindi, Urdu, Bengali, Turkish, Dutch, Swedish, Norwegian, Danish, and Finnish.
 						</Typography>
-						<Typography variant="body2" color="text.secondary">
-							Ask questions about your courses and get AI-powered answers with sources.
-						</Typography>
+						
+						<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 1, mb: 2 }}>
+							{['🇺🇸 English', '🇪🇸 Español', '🇫🇷 Français', '🇩🇪 Deutsch', '🇮🇹 Italiano', '🇵🇹 Português', '🇷🇺 Русский', '🇯🇵 日本語', '🇰🇷 한국어', '🇨🇳 中文', '🇸🇦 العربية', '🇮🇳 हिन्दी', '🇵🇰 اردو', '🇧🇩 বাংলা', '🇹🇷 Türkçe'].map((lang) => (
+								<Chip 
+									key={lang}
+									label={lang}
+									size="small"
+									variant="outlined"
+									color="primary"
+								/>
+							))}
+						</Box>
+
+						<Button 
+							variant="outlined"
+							onClick={openVoiceDialog}
+							startIcon={<MicIcon />}
+							sx={{ borderRadius: '50px' }}
+						>
+							Start Voice Command
+						</Button>
 					</Paper>
 
 					<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 2 }}>
@@ -467,6 +563,15 @@ const StudentDashboard = () => {
 												size="small" 
 												variant="outlined"
 											/>
+											{interaction.language && (
+												<Chip 
+													icon={<LanguageIcon />}
+													label={interaction.language.toUpperCase()} 
+													size="small" 
+													color="primary"
+													variant="outlined"
+												/>
+											)}
 										</Stack>
 									</Stack>
 								</CardContent>
@@ -1085,6 +1190,76 @@ const StudentDashboard = () => {
 					>
 						{saveNoteMutation.isPending ? 'Saving...' : 'Save Note'}
 					</Button>
+				</DialogActions>
+			</Dialog>
+
+			{/* Voice Command Dialog */}
+			<Dialog open={voiceDialogOpen} onClose={() => setVoiceDialogOpen(false)} maxWidth="md" fullWidth>
+				<DialogTitle>
+					<Stack direction="row" spacing={2} alignItems="center">
+						<MicIcon color="primary" />
+						<Typography variant="h6">
+							Multilingual Voice Commands
+						</Typography>
+					</Stack>
+				</DialogTitle>
+				<DialogContent>
+					<Stack spacing={3} sx={{ mt: 1 }}>
+						<Typography variant="body2" color="text.secondary">
+							Speak naturally in your preferred language. Voicera AI will understand and respond appropriately.
+						</Typography>
+						
+						<VoiceRecorder
+							onTranscript={handleVoiceTranscript}
+							onError={handleVoiceError}
+							supportedLanguages={['en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'ja', 'ko', 'zh', 'ar', 'hi', 'ur', 'bn', 'tr', 'nl', 'sv', 'no', 'da', 'fi']}
+							defaultLanguage={selectedLanguage}
+							showLanguageSelector={true}
+							showPlayback={true}
+							maxRecordingTime={60}
+						/>
+
+						{voiceTranscript && (
+							<Box>
+								<Typography variant="subtitle2" gutterBottom>
+									Voice Command Received:
+								</Typography>
+								<Typography 
+									variant="body2" 
+									sx={{ 
+										p: 2, 
+										bgcolor: 'primary.50', 
+										borderRadius: 1,
+										border: '1px solid',
+										borderColor: 'primary.200'
+									}}
+								>
+									{voiceTranscript}
+								</Typography>
+							</Box>
+						)}
+					</Stack>
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setVoiceDialogOpen(false)}>Close</Button>
+					{voiceTranscript && (
+						<Button 
+							onClick={() => {
+								handleAskQuestion()
+								setVoiceDialogOpen(false)
+							}}
+							variant="contained"
+							disabled={askQuestionMutation.isPending}
+							sx={{ 
+								borderRadius: '50px',
+								fontWeight: 'bold',
+								px: 3,
+								py: 1
+							}}
+						>
+							{askQuestionMutation.isPending ? 'Processing...' : 'Ask Question'}
+						</Button>
+					)}
 				</DialogActions>
 			</Dialog>
 		</Box>

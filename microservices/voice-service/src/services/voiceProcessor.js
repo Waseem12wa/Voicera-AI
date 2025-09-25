@@ -5,8 +5,11 @@ export class VoiceProcessor {
   constructor(cacheService, metricsService) {
     this.cacheService = cacheService
     this.metricsService = metricsService
+    
+    // Initialize Groq with fallback for missing API key
+    const apiKey = process.env.GROQ_API_KEY || 'demo-key'
     this.groq = new Groq({
-      apiKey: process.env.GROQ_API_KEY
+      apiKey: apiKey
     })
     
     this.logger = winston.createLogger({

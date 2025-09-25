@@ -6,6 +6,7 @@ import mongoose from 'mongoose'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 import integrationRoutes from './api/routes/integrationRoutes.js'
+import { TranslationService } from './services/translationService.js'
 
 dotenv.config()
 
@@ -298,6 +299,100 @@ app.use((req, _res, next) => {
 })
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
+
+// Translation endpoints
+app.post('/api/translate/text', async (req, res) => {
+	try {
+		const { text, fromLanguage = 'en', toLanguage = 'en' } = req.body
+		
+		if (!text) {
+			return res.status(400).json({ error: 'Text is required' })
+		}
+
+		const translation = await TranslationService.translateText(text, fromLanguage, toLanguage)
+		
+		res.json({
+			originalText: text,
+			translatedText: translation,
+			fromLanguage,
+			toLanguage,
+			translatedAt: new Date().toISOString()
+		})
+
+	} catch (error) {
+		console.error('Translation error:', error)
+		res.status(500).json({ error: 'Translation failed' })
+	}
+})
+
+app.post('/api/translate/content', async (req, res) => {
+	try {
+		const { content, fromLanguage = 'en', toLanguage = 'en', contentType = 'general' } = req.body
+		
+		if (!content) {
+			return res.status(400).json({ error: 'Content is required' })
+		}
+
+		const result = await TranslationService.translateEducationalContent(content, fromLanguage, toLanguage, contentType)
+		
+		res.json(result)
+
+	} catch (error) {
+		console.error('Content translation error:', error)
+		res.status(500).json({ error: 'Content translation failed' })
+	}
+})
+
+app.post('/api/translate/transcript', async (req, res) => {
+	try {
+		const { transcript, fromLanguage = 'en', toLanguage = 'en', context = {} } = req.body
+		
+		if (!transcript) {
+			return res.status(400).json({ error: 'Transcript is required' })
+		}
+
+		const result = await TranslationService.translateAudioTranscript(transcript, fromLanguage, toLanguage, context)
+		
+		res.json(result)
+
+	} catch (error) {
+		console.error('Transcript translation error:', error)
+		res.status(500).json({ error: 'Transcript translation failed' })
+	}
+})
+
+app.get('/api/translate/languages', async (_req, res) => {
+	try {
+		const languages = TranslationService.getSupportedLanguages()
+		res.json({ languages })
+	} catch (error) {
+		console.error('Error getting supported languages:', error)
+		res.status(500).json({ error: 'Failed to get supported languages' })
+	}
+})
+
+app.post('/api/translate/batch', async (req, res) => {
+	try {
+		const { texts, fromLanguage = 'en', toLanguage = 'en' } = req.body
+		
+		if (!texts || !Array.isArray(texts)) {
+			return res.status(400).json({ error: 'Texts array is required' })
+		}
+
+		const results = await TranslationService.batchTranslate(texts, fromLanguage, toLanguage)
+		
+		res.json({
+			results,
+			fromLanguage,
+			toLanguage,
+			translatedAt: new Date().toISOString()
+		})
+
+	} catch (error) {
+		console.error('Batch translation error:', error)
+		res.status(500).json({ error: 'Batch translation failed' })
+	}
+})
 
 // API Integration Routes
 app.use('/api', integrationRoutes)

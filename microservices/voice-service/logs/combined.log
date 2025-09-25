@@ -1,0 +1,12 @@
+{"level":"info","message":"voice-service listening on port 3001","service":"voice-service","timestamp":"2025-09-25T14:14:45.643Z"}
+{"level":"info","message":"Health check: http://localhost:3001/health","service":"voice-service","timestamp":"2025-09-25T14:14:45.646Z"}
+{"level":"info","message":"Metrics: http://localhost:3001/metrics","service":"voice-service","timestamp":"2025-09-25T14:14:45.647Z"}
+{"level":"info","message":"Connected to MongoDB","service":"voice-service","timestamp":"2025-09-25T14:14:45.684Z"}
+{"level":"info","message":"voice-service listening on port 3001","service":"voice-service","timestamp":"2025-09-25T14:16:17.746Z"}
+{"level":"info","message":"Health check: http://localhost:3001/health","service":"voice-service","timestamp":"2025-09-25T14:16:17.749Z"}
+{"level":"info","message":"Metrics: http://localhost:3001/metrics","service":"voice-service","timestamp":"2025-09-25T14:16:17.750Z"}
+{"level":"info","message":"Connected to MongoDB","service":"voice-service","timestamp":"2025-09-25T14:16:17.775Z"}
+{"level":"info","message":"voice-service listening on port 3001","service":"voice-service","timestamp":"2025-09-25T14:23:14.370Z"}
+{"level":"info","message":"Health check: http://localhost:3001/health","service":"voice-service","timestamp":"2025-09-25T14:23:14.373Z"}
+{"level":"info","message":"Metrics: http://localhost:3001/metrics","service":"voice-service","timestamp":"2025-09-25T14:23:14.373Z"}
+{"level":"info","message":"Connected to MongoDB","service":"voice-service","timestamp":"2025-09-25T14:23:14.387Z"}
