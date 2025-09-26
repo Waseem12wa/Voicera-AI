@@ -1,6 +1,8 @@
 import axios from 'axios'
 
-const baseURL = import.meta.env.VITE_API_BASE_URL || '/api'
+// Vite exposes import.meta.env in build/runtime; provide safe fallback for SSR/undefined
+const viteEnv = (typeof import.meta !== 'undefined' && (import.meta as any).env) || {}
+const baseURL = (viteEnv.VITE_API_BASE_URL as string) || '/api'
 
 export const api = axios.create({
 	baseURL,
