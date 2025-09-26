@@ -49,19 +49,24 @@ mongoose.connect(MONGO_URI)
     console.error('⚠️ MongoDB connection failed:', err.message)
   })
 
-// Seed database with educational data
-try {
-	const userCount = await User.countDocuments()
-	if (userCount === 0) {
-		console.log('🌱 No users found, seeding database with educational data...')
-		await seedDatabase()
-		console.log('✅ Database seeded successfully!')
-	} else {
-		console.log(`📊 Database already contains ${userCount} users`)
+// Seed database only after connection and when explicitly enabled
+async function trySeedAfterConnect() {
+	if (process.env.SEED_ON_START !== 'true') return
+	if (mongoose.connection.readyState !== 1) return
+	try {
+		const userCount = await User.countDocuments()
+		if (userCount === 0) {
+			console.log('🌱 No users found, seeding database with educational data...')
+			await seedDatabase()
+			console.log('✅ Database seeded successfully!')
+		} else {
+			console.log(`📊 Database already contains ${userCount} users`)
+		}
+	} catch (error) {
+		console.error('❌ Database seeding error:', error.message)
 	}
-} catch (error) {
-	console.error('❌ Database seeding error:', error.message)
 }
+mongoose.connection.on('connected', trySeedAfterConnect)
 
 // Socket.IO for real-time features
 io.on('connection', (socket) => {
