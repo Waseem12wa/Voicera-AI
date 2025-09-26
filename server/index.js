@@ -1,5 +1,5 @@
 import express from 'express'
-import path from 'path'
+// (removed duplicate import of path)
 import { fileURLToPath } from 'url'
 import cors from 'cors'
 import morgan from 'morgan'
