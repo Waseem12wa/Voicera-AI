@@ -14,7 +14,7 @@ dotenv.config()
 
 const app = express()
 const server = createServer(app)
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173'
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || '*'
 
 const io = new Server(server, {
 	cors: {
@@ -39,7 +39,7 @@ app.get(/^(?!\/api).*/, (req, res) => {
   res.sendFile(path.join(clientDistPath, 'index.html'))
 })
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/voicera'
+const MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/voicera'
 await mongoose.connect(MONGO_URI)
 
 // Seed database with educational data
