@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
+    "build:client": "npm --prefix ../frontend ci && npm --prefix ../frontend run build",
     "seed": "node seeds/educationalData.js",
     "setup": "node start-server.js"
   },
@@ -28,5 +29,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18 <23"
   }
 }

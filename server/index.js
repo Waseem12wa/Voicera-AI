@@ -1,4 +1,6 @@
 import express from 'express'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import cors from 'cors'
 import morgan from 'morgan'
 import dotenv from 'dotenv'
@@ -25,6 +27,17 @@ app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }))
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 app.use(morgan('dev'))
+
+// Serve built frontend from ../frontend/dist
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const clientDistPath = path.resolve(__dirname, '../frontend/dist')
+app.use(express.static(clientDistPath))
+
+// SPA fallback to index.html for client-side routing, excluding API routes
+app.get(/^(?!\/api).*/, (req, res) => {
+  res.sendFile(path.join(clientDistPath, 'index.html'))
+})
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/voicera'
 await mongoose.connect(MONGO_URI)
