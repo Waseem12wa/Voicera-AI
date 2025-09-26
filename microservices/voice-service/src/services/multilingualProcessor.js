@@ -7,7 +7,10 @@ export class MultilingualProcessor {
     this.metricsService = metricsService
     
     // Initialize Groq with fallback for missing API key
-    const apiKey = process.env.GROQ_API_KEY || 'demo-key'
+    const apiKey = process.env.GROQ_API_KEY
+    if (!apiKey) {
+      throw new Error('GROQ_API_KEY environment variable is required')
+    }
     this.groq = new Groq({
       apiKey: apiKey
     })
