@@ -40,7 +40,14 @@ app.get(/^(?!\/api).*/, (req, res) => {
 })
 
 const MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/voicera'
-await mongoose.connect(MONGO_URI)
+mongoose.connect(MONGO_URI)
+  .then(() => {
+    console.log('✅ Connected to MongoDB')
+    // Optionally place any post-connect initialization here
+  })
+  .catch((err) => {
+    console.error('⚠️ MongoDB connection failed:', err.message)
+  })
 
 // Seed database with educational data
 try {
